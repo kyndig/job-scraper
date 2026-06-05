@@ -1,4 +1,5 @@
-from typing import TypeAlias
+from __future__ import annotations
+
 from pydantic import BaseModel, TypeAdapter, computed_field
 from pydantic.dataclasses import dataclass
 
@@ -23,5 +24,5 @@ class Job(BaseModel):
         return self.job_overview.job_uri
 
 
-JobList: TypeAlias = list[Job]
+JobList = list[Job]
 JobListModel = TypeAdapter(JobList)

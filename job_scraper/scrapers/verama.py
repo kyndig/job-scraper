@@ -1,8 +1,8 @@
-from scrapers.base import JobScraper
+from job_scraper.scrapers.base import JobScraper
 from playwright.async_api import Page
 from typing import List
 
-from models import Job, JobOverview
+from job_scraper.models import Job, JobOverview
 
 import logging
 

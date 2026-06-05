@@ -4,17 +4,15 @@ from playwright.async_api import Browser, async_playwright
 from typing import List
 from dotenv import load_dotenv
 
-from models import Job
-
-from scrapers.folq import FolqScraper
-from scrapers.verama import VeramaScraper
-from scrapers.mercell import MercellScraper
-from scrapers.emagine import EmagineScraper
-from scrapers.witted import WittedScraper
-
-from summarizer import JobDescriptionSummarizer
-from slack_poster import SlackPoster
-from new_job_detector import NewJobPostDetector
+from job_scraper.kois.db import SessionLocal, create_db_engine
+from job_scraper.kois.migrations import run_migrations
+from job_scraper.kois.orchestrator import run_kois_pipeline
+from job_scraper.models import Job
+from job_scraper.scrapers.emagine import EmagineScraper
+from job_scraper.scrapers.folq import FolqScraper
+from job_scraper.scrapers.mercell import MercellScraper
+from job_scraper.scrapers.verama import VeramaScraper
+from job_scraper.scrapers.witted import WittedScraper
 
 logging.basicConfig(level=logging.INFO)
 
@@ -47,22 +45,12 @@ async def run_scrapers() -> List[Job]:
 
 async def main():
     load_dotenv()
-
-    summarizer = JobDescriptionSummarizer()
     scraped_jobs: List[Job] = await run_scrapers()
-
-    slack_poster = SlackPoster()
-
-    change_detector = NewJobPostDetector("jobs.json")
-
-    new_jobs = change_detector.detect_new_jobs(scraped_jobs)
-    logging.info(f"Found {len(scraped_jobs)} jobs in total, {len(new_jobs)} are new.")
-
-    for job in new_jobs:
-        job.description_summarised = summarizer.summarize(job.description)
-        slack_poster.post_job(job)
-
-    change_detector.update_known_jobs(new_jobs)
+    engine = create_db_engine()
+    run_migrations(engine)
+    with SessionLocal() as session:
+        result = run_kois_pipeline(session=session, scraped_jobs=scraped_jobs)
+    logging.info("KOIS run complete: %s", result)
 
 
 if __name__ == "__main__":
