@@ -2,6 +2,8 @@
 
 Async Python batch job that scrapes freelance assignments from Mercell, Verama, Folq, Emagine, and Witted, then posts only new listings to Slack.
 
+Python requirement: 3.12+
+
 Flow per run:
 - scrape all sources in parallel with Playwright
 - diff against local state in `jobs.json`
