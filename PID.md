@@ -74,6 +74,8 @@ Ingest `oppdrag@kynd.no` emails and current scraper outputs, preserve raw eviden
 
 Success metric: KOIS becomes a searchable assignment archive with fewer duplicate distractions than email.
 
+Implementation status: in progress. Current implementation uses Postgres-backed persistence, scraper + IMAP ingestion adapters, cluster/source comparison records, a minimal review API surface, and digest-item persistence.
+
 ### Phase 2: Market And Agreement Intelligence
 
 Add Doffin and procurement monitoring, agreement-signal handling, buyer and broker analytics, and discovery of DPS or frame agreements Kynd may not have found or applied for.

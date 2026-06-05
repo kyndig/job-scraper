@@ -3,7 +3,7 @@ from playwright.async_api import Browser, Page, BrowserContext
 from abc import ABC, abstractmethod
 from typing import List
 
-from models import Job, JobOverview
+from job_scraper.models import Job, JobOverview
 
 import logging
 

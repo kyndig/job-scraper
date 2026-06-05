@@ -1,6 +1,6 @@
 import os
 from typing import List
-from models import Job, JobListModel
+from job_scraper.models import Job, JobListModel
 
 class NewJobPostDetector:
     """

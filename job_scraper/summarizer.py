@@ -14,16 +14,20 @@ class JobDescriptionSummarizer:
         Use markdown for Slack as the formatting for the summary. Use one * instead of two when doing bold headlines.
     """
 
-    def __init__(self):
+    def __init__(self, optional: bool = False):
         api_key = os.getenv("GEMINI_API_KEY")
 
         if not api_key:
-            print(f"No GEMINI_API_KEY in environment")
-            exit(1)
+            if optional:
+                self.client = None
+                return
+            raise ValueError("No GEMINI_API_KEY in environment")
 
         self.client = genai.Client(api_key=api_key)
 
     def summarize(self, description: str):
+        if self.client is None:
+            return None
         response = self.client.models.generate_content(
             model="gemini-2.0-flash",
             config=types.GenerateContentConfig(

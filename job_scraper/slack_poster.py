@@ -1,18 +1,23 @@
+from __future__ import annotations
+
 import os
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from slack_sdk.models.blocks import HeaderBlock, SectionBlock, DividerBlock
 from slack_sdk.models.blocks.basic_components import PlainTextObject, MarkdownTextObject
 
-from models import Job
+from job_scraper.models import Job
 
 class SlackPoster:
     client: WebClient
 
-    def __init__(self):
+    def __init__(self, optional: bool = False):
         self.token = os.getenv("SLACK_TOKEN")
 
         if not self.token:
+            if optional:
+                self.client = None
+                return
             raise ValueError("Missing SLACK_TOKEN in environment.")
 
         self.client = WebClient(token=self.token)
@@ -54,12 +59,44 @@ class SlackPoster:
         Posts a single job to Slack.
         """
         text, blocks = self.create_job_slack_message(job)
+        if self.client is None:
+            return None
 
         try:
             response = self.client.chat_postMessage(
                 channel=channel, text=text, blocks=blocks
             )
             return response
+        except SlackApiError as e:
+            print(f"Slack API Error: {e.response['error']}")
+
+    def post_digest(self, payload: dict, channel: str = "job-posting"):
+        if self.client is None:
+            return None
+
+        title = payload.get("title") or "Untitled opportunity"
+        customer = payload.get("customer") or "Unknown customer"
+        deadline = payload.get("deadline") or "Unknown deadline"
+        source_count = payload.get("source_count", 0)
+        confidence = payload.get("confidence", 0)
+        review_status = payload.get("review_status", "needs_review")
+        cluster_id = payload.get("cluster_id")
+        text = f"KOIS digest: {title}"
+        blocks = [
+            HeaderBlock(text=PlainTextObject(text=f"KOIS: {title}")),
+            SectionBlock(
+                fields=[
+                    MarkdownTextObject(text=f"*Kunde:*\n{customer}"),
+                    MarkdownTextObject(text=f"*Frist:*\n{deadline}"),
+                    MarkdownTextObject(text=f"*Kilder:*\n{source_count}"),
+                    MarkdownTextObject(text=f"*Status:*\n{review_status}"),
+                    MarkdownTextObject(text=f"*Confidence:*\n{confidence:.2f}"),
+                    MarkdownTextObject(text=f"*Cluster ID:*\n{cluster_id}"),
+                ]
+            ),
+        ]
+        try:
+            return self.client.chat_postMessage(channel=channel, text=text, blocks=blocks)
         except SlackApiError as e:
             print(f"Slack API Error: {e.response['error']}")
 

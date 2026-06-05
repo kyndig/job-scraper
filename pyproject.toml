@@ -1,14 +1,26 @@
 [project]
 name = "job-scraper"
 version = "0.1.0"
-description = ""
+description = "KOIS Phase 1 foundation and ingestion pipeline"
 authors = ["Daniel Sørenes <daniel@kynd.no>"]
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "google-genai>=1.10.0",
     "playwright>=1.51.0",
+    "psycopg[binary]",
     "pydantic>=2.11.3",
+    "pydantic-settings",
     "python-dotenv>=1.1.0",
+    "sqlalchemy",
     "slack-sdk>=3.35.0",
+    "fastapi",
+    "uvicorn",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
 ]
