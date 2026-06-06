@@ -53,6 +53,9 @@ KOIS does not own:
 - `AgreementGap`: persisted potential coverage gap where repeated buyer demand appears without matching agreement signals.
 - `ReviewState`: `auto_accepted`, `needs_review`, `manually_merged`, `manually_split`, `ignored`, or `watch_only`.
 - `DigestItem`: generated output for Slack or reports, backed by stored evidence.
+- `RoleClassification`: lightweight role category and tags inferred from cluster source content.
+- `RelevanceScore`: availability-aware score used for sales filtering and digest eligibility.
+- `AvailabilityProfile`: lightweight operator-provided role capacity signal used for Phase 3 filtering.
 - `ExternalFitAssessment`: later KBS-provided fit assessment for consultants, CVs, references, or bid material.
 
 ## Source Priority
@@ -91,6 +94,8 @@ Add lightweight role classification, availability-aware digest modes, source/rel
 
 Success metric: Slack highlights fewer but better items while the archive remains complete.
 
+Implementation status: in progress. Current implementation adds deterministic role classification, availability-profile-aware relevance scoring, configurable digest thresholds/cadence, and relevant-opportunity API filtering while preserving archive recall.
+
 ### Phase 4: KBS Integration
 
 Expose opportunity profiles to KBS and receive high-level fit assessments back. KOIS should not own CV or bid material.
@@ -107,6 +112,7 @@ Success metric: recruitment and CV positioning decisions are informed by observe
 
 - Basic UI for review, merge, split, ignore, and source comparison.
 - Slack channels for conservative digests, review prompts, and optionally DPS/agreement updates.
+- API view for relevance-filtered opportunities based on current Phase 3 policy.
 - Periodic market reports.
 - Searchable archive.
 - API or export surface for KBS.
