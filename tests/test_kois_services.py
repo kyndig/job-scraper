@@ -2,9 +2,11 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from job_scraper.kois.clustering import cluster_records
+from job_scraper.kois.digest import cluster_to_payload
 from job_scraper.kois.domain import RawIngestionItem
 from job_scraper.kois.extraction import RecordExtractor, make_cluster_key
 from job_scraper.kois.repository import (
+    attach_cluster_source,
     create_digest_item,
     create_extracted_record,
     create_or_update_cluster,
@@ -238,4 +240,62 @@ def test_create_digest_item_prevents_second_send_after_status_change():
     assert second.id == first.id
     assert second.sent_at is not None
     assert len(digest_items) == 1
+
+
+def test_cluster_to_payload_uses_primary_source_deadline():
+    session = _session()
+    raw = upsert_raw_source_item(
+        session,
+        RawIngestionItem(
+            source_type="scraper",
+            source_name="mercell",
+            external_id="id-deadline",
+            raw_body="raw-deadline",
+        ),
+    )
+    primary = create_extracted_record(
+        session,
+        {
+            "raw_source_item_id": raw.id,
+            "title": "Assignment",
+            "customer": "Kynd",
+            "broker": "mercell",
+            "source_url": "https://example.com/a",
+            "deadline": "2026-07-01",
+            "description": "desc",
+            "summary": "sum",
+            "extracted_data": {},
+            "extraction_confidence": 0.9,
+        },
+    )
+    secondary = create_extracted_record(
+        session,
+        {
+            "raw_source_item_id": raw.id,
+            "title": "Assignment",
+            "customer": "Kynd",
+            "broker": "email",
+            "source_url": "https://example.com/a",
+            "deadline": "2026-08-01",
+            "description": "desc",
+            "summary": "sum",
+            "extracted_data": {},
+            "extraction_confidence": 0.8,
+        },
+    )
+    cluster = create_or_update_cluster(
+        session=session,
+        cluster_key="cluster-deadline",
+        title="Assignment",
+        customer="Kynd",
+        confidence=0.9,
+        review_status=ReviewStatus.AUTO_ACCEPTED,
+    )
+    attach_cluster_source(session, cluster, secondary, confidence=0.8, rationale="email")
+    attach_cluster_source(session, cluster, primary, confidence=0.9, rationale="broker")
+    cluster.primary_source_record_id = primary.id
+    session.commit()
+
+    payload = cluster_to_payload(cluster)
+    assert payload.deadline == "2026-07-01"
 
