@@ -81,6 +81,8 @@ class SlackPoster:
         confidence = payload.get("confidence", 0)
         review_status = payload.get("review_status", "needs_review")
         cluster_id = payload.get("cluster_id")
+        role_category = payload.get("role_category") or "generalist"
+        relevance_score = payload.get("relevance_score", 0)
         text = f"KOIS digest: {title}"
         blocks = [
             HeaderBlock(text=PlainTextObject(text=f"KOIS: {title}")),
@@ -91,6 +93,8 @@ class SlackPoster:
                     MarkdownTextObject(text=f"*Kilder:*\n{source_count}"),
                     MarkdownTextObject(text=f"*Status:*\n{review_status}"),
                     MarkdownTextObject(text=f"*Confidence:*\n{confidence:.2f}"),
+                    MarkdownTextObject(text=f"*Role:*\n{role_category}"),
+                    MarkdownTextObject(text=f"*Relevance:*\n{relevance_score:.2f}"),
                     MarkdownTextObject(text=f"*Cluster ID:*\n{cluster_id}"),
                 ]
             ),

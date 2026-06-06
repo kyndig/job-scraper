@@ -95,6 +95,12 @@ class OpportunityCluster(Base):
         Enum(ReviewStatus), default=ReviewStatus.NEEDS_REVIEW, index=True
     )
     confidence: Mapped[float] = mapped_column(default=0.0)
+    role_category: Mapped[Optional[str]] = mapped_column(
+        String(128), nullable=True, index=True
+    )
+    role_tags_json: Mapped[list] = mapped_column("role_tags", JSON, default=list)
+    relevance_score: Mapped[float] = mapped_column(default=0.0, index=True)
+    relevance_rationale: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow
     )
