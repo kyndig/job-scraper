@@ -64,10 +64,13 @@ def send_digest_items(
         if digest_item.sent_at is not None:
             continue
 
-        slack_ts = None
         if live_posting:
             response = slack.post_digest(payload.__dict__, channel=channel)
-            slack_ts = None if response is None else response.get("ts")
+            if response is None:
+                continue
+            slack_ts = response.get("ts")
+        else:
+            slack_ts = None
 
         mark_digest_sent(session, digest_item, slack_ts)
         sent_payloads.append(payload.__dict__)
