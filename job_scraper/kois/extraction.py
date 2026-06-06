@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 
 from job_scraper.models import Job
 from job_scraper.kois.schema import RawSourceItem
-from job_scraper.kois.utils import normalize_text
+from job_scraper.kois.utils import normalize_text, normalize_url
 from job_scraper.summarizer import JobDescriptionSummarizer
 
 
@@ -75,7 +75,7 @@ class RecordExtractor:
 
 
 def make_cluster_key(payload: dict) -> str:
-    source_url = normalize_text(payload.get("source_url"))
+    source_url = normalize_url(payload.get("source_url"))
     if source_url:
         return source_url
 

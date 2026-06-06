@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from job_scraper.kois.clustering import cluster_records
 from job_scraper.kois.domain import RawIngestionItem
-from job_scraper.kois.extraction import RecordExtractor
+from job_scraper.kois.extraction import RecordExtractor, make_cluster_key
 from job_scraper.kois.repository import (
     create_extracted_record,
     create_or_update_cluster,
@@ -196,4 +196,10 @@ def test_refresh_comparisons_is_idempotent():
 
     assert len(first_pass) == len(second_pass)
     assert {comparison.field_name for comparison in second_pass} == {"title", "broker"}
+
+
+def test_make_cluster_key_normalizes_trailing_slash_urls():
+    with_slash = make_cluster_key({"source_url": "https://example.com/jobs/1/"})
+    without_slash = make_cluster_key({"source_url": "https://example.com/jobs/1"})
+    assert with_slash == without_slash
 
