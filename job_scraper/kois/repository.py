@@ -349,7 +349,7 @@ def upsert_agreement_gap(session: Session, payload: dict) -> AgreementGap:
         existing.confidence = payload["confidence"]
         existing.rationale = payload["rationale"]
         existing.evidence_json = payload["evidence_json"]
-        if existing.status in {GapStatus.OPEN, GapStatus.ACKNOWLEDGED}:
+        if existing.status == GapStatus.OPEN:
             existing.status = payload.get("status", GapStatus.OPEN)
         session.flush()
         return existing

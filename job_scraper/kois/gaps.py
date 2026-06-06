@@ -36,10 +36,25 @@ def discover_missing_agreement_gaps(
         clusters_by_buyer[buyer_key].append(cluster)
 
     persisted: list[AgreementGap] = []
+    existing_gaps_by_buyer: dict[str, list[AgreementGap]] = defaultdict(list)
+    for gap in session.execute(select(AgreementGap)).scalars():
+        buyer_key = normalize_text(gap.buyer_name)
+        if buyer_key:
+            existing_gaps_by_buyer[buyer_key].append(gap)
+
     for buyer_key, clusters in clusters_by_buyer.items():
-        if len(clusters) < min_cluster_hits:
-            continue
         if buyer_key in buyers_with_agreements:
+            for gap in existing_gaps_by_buyer.get(buyer_key, []):
+                if gap.status not in {GapStatus.OPEN, GapStatus.ACKNOWLEDGED}:
+                    continue
+                gap.status = GapStatus.IGNORED
+                gap.note = (
+                    "Auto-closed after matching agreement signal detected for this buyer."
+                )
+                session.flush()
+                persisted.append(gap)
+            continue
+        if len(clusters) < min_cluster_hits:
             continue
 
         buyer_name = clusters[0].customer or buyer_key
