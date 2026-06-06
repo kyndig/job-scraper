@@ -24,12 +24,36 @@ SOURCE_PRIORITY = {
 }
 
 
-def _source_rank(record: ExtractedRecord) -> int:
+def _source_priority_key(record: ExtractedRecord) -> str:
+    extracted_data = record.extracted_data or {}
+    source_type = normalize_text(extracted_data.get("source_type"))
+    platform = normalize_text(extracted_data.get("platform"))
+    host = normalize_text(extracted_data.get("host"))
     broker = normalize_text(record.broker)
-    for key, value in SOURCE_PRIORITY.items():
-        if key in broker:
-            return value
-    return SOURCE_PRIORITY["unknown"]
+    source_url = normalize_text(record.source_url)
+    fingerprint = " ".join(
+        part for part in (source_type, platform, host, broker, source_url) if part
+    )
+
+    if "doffin" in fingerprint:
+        return "doffin"
+    if "procurement" in fingerprint:
+        return "procurement"
+    if source_type == "email" or "@" in broker:
+        return "email"
+    if "forwarded" in fingerprint or "forward" in fingerprint:
+        return "forwarded"
+    if "manual" in fingerprint:
+        return "manual"
+    if source_type == "scraper" or "broker" in fingerprint:
+        return "broker"
+    if "direct" in fingerprint:
+        return "direct"
+    return "unknown"
+
+
+def _source_rank(record: ExtractedRecord) -> int:
+    return SOURCE_PRIORITY[_source_priority_key(record)]
 
 
 def _similarity(record: ExtractedRecord, cluster: OpportunityCluster) -> tuple[float, str]:
@@ -109,6 +133,14 @@ def _refresh_primary_sources(session: Session, clusters: list[OpportunityCluster
         sources = [source.record for source in cluster.sources]
         if not sources:
             continue
-        primary = sorted(sources, key=_source_rank, reverse=True)[0]
+        primary = sorted(
+            sources,
+            key=lambda record: (
+                _source_rank(record),
+                record.extraction_confidence or 0.0,
+                record.id,
+            ),
+            reverse=True,
+        )[0]
         cluster.primary_source_record_id = primary.id
         session.flush()
