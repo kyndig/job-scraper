@@ -12,7 +12,11 @@ from job_scraper.kois.domain import RawIngestionItem
 from job_scraper.kois.extraction import RecordExtractor
 from job_scraper.kois.ingestion.imap_adapter import fetch_imap_items
 from job_scraper.kois.ingestion.scraper_adapter import jobs_to_raw_items
-from job_scraper.kois.repository import create_extracted_record, upsert_raw_source_item
+from job_scraper.kois.repository import (
+    create_extracted_record,
+    get_extracted_record_for_raw_source,
+    upsert_raw_source_item,
+)
 from job_scraper.models import Job
 from job_scraper.slack_poster import SlackPoster
 from job_scraper.summarizer import JobDescriptionSummarizer
@@ -39,6 +43,10 @@ def run_kois_pipeline(
     extractor = RecordExtractor(summarizer=summarizer)
     records = []
     for raw_item in raw_items:
+        existing_record = get_extracted_record_for_raw_source(session, raw_item.id)
+        if existing_record:
+            records.append(existing_record)
+            continue
         try:
             payload = extractor.extract(raw_item)
             record = create_extracted_record(session, payload)
