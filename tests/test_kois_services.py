@@ -20,6 +20,7 @@ from job_scraper.kois.schema import (
     DigestItem,
     ExtractedRecord,
     OpportunityCluster,
+    RawSourceItem,
     ReviewStatus,
     SourceComparison,
 )
@@ -298,4 +299,31 @@ def test_cluster_to_payload_uses_primary_source_deadline():
 
     payload = cluster_to_payload(cluster)
     assert payload.deadline == "2026-07-01"
+
+
+def test_raw_source_upsert_reuses_external_id_when_body_changes():
+    session = _session()
+    first = upsert_raw_source_item(
+        session,
+        RawIngestionItem(
+            source_type="email",
+            source_name="oppdrag@kynd.no",
+            external_id="<message-1@example.com>",
+            raw_body="original-body",
+        ),
+    )
+    second = upsert_raw_source_item(
+        session,
+        RawIngestionItem(
+            source_type="email",
+            source_name="oppdrag@kynd.no",
+            external_id="<message-1@example.com>",
+            raw_body="updated-body",
+        ),
+    )
+    session.commit()
+
+    all_rows = session.execute(select(RawSourceItem)).scalars().all()
+    assert second.id == first.id
+    assert len(all_rows) == 1
 

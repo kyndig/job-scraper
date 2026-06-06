@@ -25,11 +25,21 @@ AUTOMATED_REVIEW_STATUSES = frozenset(
 
 def upsert_raw_source_item(session: Session, item: RawIngestionItem) -> RawSourceItem:
     item_hash = content_hash(item.raw_body)
-    existing = session.execute(
+    existing_by_external_id = session.execute(
+        select(RawSourceItem).where(
+            RawSourceItem.source_type == item.source_type,
+            RawSourceItem.source_name == item.source_name,
+            RawSourceItem.external_id == item.external_id,
+        )
+    ).scalar_one_or_none()
+    if existing_by_external_id:
+        return existing_by_external_id
+
+    existing_by_hash = session.execute(
         select(RawSourceItem).where(RawSourceItem.content_hash == item_hash)
     ).scalar_one_or_none()
-    if existing:
-        return existing
+    if existing_by_hash:
+        return existing_by_hash
 
     raw = RawSourceItem(
         source_type=item.source_type,
