@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from job_scraper.kois.config import KOISSettings, get_settings
+from job_scraper.kois.filtering import OpportunityFilterPolicy
 from job_scraper.kois.repository import (
     create_digest_item,
     delete_unsent_digest_items,
     mark_digest_sent,
 )
-from job_scraper.kois.schema import OpportunityCluster, ReviewStatus
+from job_scraper.kois.schema import DigestItem, OpportunityCluster
 from job_scraper.slack_poster import SlackPoster
 
 
@@ -23,6 +27,10 @@ class DigestPayload:
     confidence: float
     review_status: str
     cluster_id: int
+    role_category: str | None
+    role_tags: list[str]
+    relevance_score: float
+    relevance_rationale: str | None
 
 
 def _resolve_primary_record(cluster: OpportunityCluster):
@@ -50,18 +58,39 @@ def cluster_to_payload(cluster: OpportunityCluster) -> DigestPayload:
         confidence=cluster.confidence,
         review_status=cluster.review_status.value,
         cluster_id=cluster.id,
+        role_category=cluster.role_category,
+        role_tags=cluster.role_tags_json or [],
+        relevance_score=cluster.relevance_score,
+        relevance_rationale=cluster.relevance_rationale,
     )
 
 
-def select_digest_candidates(clusters: list[OpportunityCluster]) -> list[OpportunityCluster]:
+def select_digest_candidates(
+    clusters: list[OpportunityCluster], policy: OpportunityFilterPolicy
+) -> list[OpportunityCluster]:
     candidates: list[OpportunityCluster] = []
     for cluster in clusters:
-        if cluster.review_status in (ReviewStatus.IGNORED, ReviewStatus.WATCH_ONLY):
-            continue
-        if cluster.review_status == ReviewStatus.NEEDS_REVIEW and cluster.confidence < 0.75:
+        if not policy.should_include_digest(cluster):
             continue
         candidates.append(cluster)
     return candidates
+
+
+def _cadence_blocked(session: Session, cadence_minutes: int) -> bool:
+    if cadence_minutes <= 0:
+        return False
+    latest_sent_at = session.execute(
+        select(DigestItem.sent_at)
+        .order_by(DigestItem.sent_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if latest_sent_at is None:
+        return False
+    if latest_sent_at.tzinfo is None:
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+    else:
+        now = datetime.now(timezone.utc)
+    return latest_sent_at > (now - timedelta(minutes=cadence_minutes))
 
 
 def send_digest_items(
@@ -70,16 +99,23 @@ def send_digest_items(
     slack: SlackPoster,
     live_posting: bool,
     channel: str,
+    settings: KOISSettings | None = None,
+    policy: OpportunityFilterPolicy | None = None,
 ) -> list[dict]:
+    settings = settings or get_settings()
+    policy = policy or OpportunityFilterPolicy(settings)
+    cadence_minutes = int(getattr(settings, "digest_cadence_minutes", 0))
+    cadence_blocked = _cadence_blocked(session, cadence_minutes)
     sent_payloads: list[dict] = []
     for cluster in clusters:
+        evaluation = policy.apply_to_cluster(cluster)
         if not cluster.sources:
             delete_unsent_digest_items(session, cluster)
             continue
-        if cluster.review_status in (ReviewStatus.IGNORED, ReviewStatus.WATCH_ONLY):
+        if not policy.should_include_digest(
+            cluster, evaluated_relevance=evaluation.relevance_score
+        ):
             delete_unsent_digest_items(session, cluster)
-            continue
-        if cluster.review_status == ReviewStatus.NEEDS_REVIEW and cluster.confidence < 0.75:
             continue
 
         payload = cluster_to_payload(cluster)
@@ -90,6 +126,8 @@ def send_digest_items(
             payload=payload.__dict__,
         )
         if digest_item.sent_at is not None:
+            continue
+        if cadence_blocked:
             continue
 
         if live_posting:

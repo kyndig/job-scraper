@@ -6,13 +6,15 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from job_scraper.kois.analytics import phase2_summary
+from job_scraper.kois.config import get_settings
 from job_scraper.kois.db import get_db_session
+from job_scraper.kois.filtering import OpportunityFilterPolicy
 from job_scraper.kois.gaps import discover_missing_agreement_gaps, set_gap_status
 from job_scraper.kois.repository import list_agreement_gaps, list_agreement_signals
 from job_scraper.kois.review import ReviewService
 from job_scraper.kois.schema import GapStatus, OpportunityCluster, ReviewStatus
 
-app = FastAPI(title="KOIS Phase 2 Review And Intelligence API")
+app = FastAPI(title="KOIS Review, Intelligence, And Filtering API")
 
 
 class ReviewUpdate(BaseModel):
@@ -35,12 +37,18 @@ def healthcheck():
 @app.get("/clusters")
 def list_clusters(
     status: ReviewStatus | None = None,
+    role: str | None = None,
+    min_relevance_score: float | None = None,
     q: str | None = None,
     session: Session = Depends(get_db_session),
 ):
     query = select(OpportunityCluster)
     if status:
         query = query.where(OpportunityCluster.review_status == status)
+    if role:
+        query = query.where(OpportunityCluster.role_category == role)
+    if min_relevance_score is not None:
+        query = query.where(OpportunityCluster.relevance_score >= min_relevance_score)
     if q:
         query = query.where(
             or_(
@@ -59,6 +67,10 @@ def list_clusters(
             "review_status": cluster.review_status.value,
             "confidence": cluster.confidence,
             "source_count": len(cluster.sources),
+            "role_category": cluster.role_category,
+            "role_tags": cluster.role_tags_json,
+            "relevance_score": cluster.relevance_score,
+            "relevance_rationale": cluster.relevance_rationale,
         }
         for cluster in clusters
     ]
@@ -81,6 +93,60 @@ def review_queue(session: Session = Depends(get_db_session)):
         }
         for cluster in clusters
     ]
+
+
+@app.get("/opportunities/relevant")
+def relevant_opportunities(
+    status: ReviewStatus | None = None,
+    role: str | None = None,
+    min_relevance_score: float | None = None,
+    limit: int = 100,
+    session: Session = Depends(get_db_session),
+):
+    settings = get_settings()
+    policy = OpportunityFilterPolicy(settings)
+    threshold = (
+        min_relevance_score
+        if min_relevance_score is not None
+        else settings.digest_min_relevance_score
+    )
+    query = select(OpportunityCluster)
+    if status:
+        query = query.where(OpportunityCluster.review_status == status)
+    if role:
+        query = query.where(OpportunityCluster.role_category == role)
+    clusters = list(
+        session.execute(
+            query.order_by(
+                OpportunityCluster.relevance_score.desc(),
+                OpportunityCluster.confidence.desc(),
+                OpportunityCluster.id.desc(),
+            ).limit(limit)
+        ).scalars()
+    )
+    response = []
+    for cluster in clusters:
+        evaluation = policy.evaluate_cluster(cluster)
+        if evaluation.relevance_score < threshold or not policy.should_include_digest(
+            cluster, evaluated_relevance=evaluation.relevance_score
+        ):
+            continue
+        response.append(
+            {
+                "id": cluster.id,
+                "cluster_key": cluster.cluster_key,
+                "title": cluster.title,
+                "customer": cluster.customer,
+                "review_status": cluster.review_status.value,
+                "confidence": cluster.confidence,
+                "source_count": len(cluster.sources),
+                "role_category": evaluation.role_category,
+                "role_tags": evaluation.role_tags,
+                "relevance_score": evaluation.relevance_score,
+                "relevance_rationale": evaluation.relevance_rationale,
+            }
+        )
+    return response
 
 
 @app.patch("/clusters/{cluster_id}/status")

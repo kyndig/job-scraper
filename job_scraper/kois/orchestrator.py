@@ -11,6 +11,7 @@ from job_scraper.kois.config import get_settings
 from job_scraper.kois.digest import send_digest_items
 from job_scraper.kois.domain import RawIngestionItem
 from job_scraper.kois.extraction import RecordExtractor
+from job_scraper.kois.filtering import OpportunityFilterPolicy, score_clusters
 from job_scraper.kois.gaps import discover_missing_agreement_gaps
 from job_scraper.kois.ingestion.imap_adapter import fetch_imap_items
 from job_scraper.kois.ingestion.procurement_adapter import fetch_procurement_items
@@ -92,6 +93,8 @@ def run_kois_pipeline(
     clusters = list(
         {cluster.id: cluster for cluster in [*touched_clusters, *pending_clusters]}.values()
     )
+    score_clusters(session, clusters, settings)
+    filter_policy = OpportunityFilterPolicy(settings)
     slack = SlackPoster(optional=True)
     digests = send_digest_items(
         session=session,
@@ -99,6 +102,8 @@ def run_kois_pipeline(
         slack=slack,
         live_posting=settings.run_live_slack,
         channel=settings.slack_channel,
+        settings=settings,
+        policy=filter_policy,
     )
     session.commit()
     return {
