@@ -5,14 +5,17 @@ from job_scraper.kois.clustering import cluster_records
 from job_scraper.kois.domain import RawIngestionItem
 from job_scraper.kois.extraction import RecordExtractor, make_cluster_key
 from job_scraper.kois.repository import (
+    create_digest_item,
     create_extracted_record,
     create_or_update_cluster,
     get_extracted_record_for_raw_source,
+    mark_digest_sent,
     upsert_raw_source_item,
 )
 from job_scraper.kois.schema import (
     Base,
     ClusterSource,
+    DigestItem,
     ExtractedRecord,
     OpportunityCluster,
     ReviewStatus,
@@ -202,4 +205,37 @@ def test_make_cluster_key_normalizes_trailing_slash_urls():
     with_slash = make_cluster_key({"source_url": "https://example.com/jobs/1/"})
     without_slash = make_cluster_key({"source_url": "https://example.com/jobs/1"})
     assert with_slash == without_slash
+
+
+def test_create_digest_item_prevents_second_send_after_status_change():
+    session = _session()
+    cluster = create_or_update_cluster(
+        session=session,
+        cluster_key="cluster-a",
+        title="Assignment",
+        customer="Kynd",
+        confidence=0.8,
+        review_status=ReviewStatus.NEEDS_REVIEW,
+    )
+    first = create_digest_item(
+        session=session,
+        cluster=cluster,
+        status=ReviewStatus.NEEDS_REVIEW,
+        payload={"cluster_id": cluster.id, "review_status": ReviewStatus.NEEDS_REVIEW.value},
+    )
+    mark_digest_sent(session, first, slack_ts="123.45")
+    session.commit()
+
+    second = create_digest_item(
+        session=session,
+        cluster=cluster,
+        status=ReviewStatus.AUTO_ACCEPTED,
+        payload={"cluster_id": cluster.id, "review_status": ReviewStatus.AUTO_ACCEPTED.value},
+    )
+    session.commit()
+
+    digest_items = session.execute(select(DigestItem)).scalars().all()
+    assert second.id == first.id
+    assert second.sent_at is not None
+    assert len(digest_items) == 1
 
