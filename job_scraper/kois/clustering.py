@@ -11,6 +11,7 @@ from job_scraper.kois.repository import (
     upsert_source_comparison,
 )
 from job_scraper.kois.schema import (
+    ClusterSource,
     ExtractedRecord,
     OpportunityCluster,
     ReviewStatus,
@@ -63,7 +64,21 @@ def _source_rank(record: ExtractedRecord) -> int:
     return SOURCE_PRIORITY[_source_priority_key(record)]
 
 
-def _similarity(record: ExtractedRecord, cluster: OpportunityCluster) -> tuple[float, str]:
+def _cluster_deadlines(session: Session, cluster_id: int) -> set[str]:
+    rows = session.execute(
+        select(ExtractedRecord.deadline)
+        .join(ClusterSource, ClusterSource.extracted_record_id == ExtractedRecord.id)
+        .where(
+            ClusterSource.opportunity_cluster_id == cluster_id,
+            ExtractedRecord.deadline.is_not(None),
+        )
+    ).scalars()
+    return {normalize_text(deadline) for deadline in rows if normalize_text(deadline)}
+
+
+def _similarity(
+    session: Session, record: ExtractedRecord, cluster: OpportunityCluster
+) -> tuple[float, str]:
     score = 0.0
     parts = []
     if normalize_url(record.source_url) and cluster.cluster_key == normalize_url(record.source_url):
@@ -75,7 +90,8 @@ def _similarity(record: ExtractedRecord, cluster: OpportunityCluster) -> tuple[f
     if normalize_text(record.customer) == normalize_text(cluster.customer):
         score += 0.1
         parts.append("customer")
-    if normalize_text(record.deadline):
+    record_deadline = normalize_text(record.deadline)
+    if record_deadline and record_deadline in _cluster_deadlines(session, cluster.id):
         score += 0.1
         parts.append("deadline")
     return min(score, 1.0), ",".join(parts) or "weak-match"
@@ -112,7 +128,7 @@ def cluster_records(session: Session, records: list[ExtractedRecord]) -> list[Op
             review_status=review_status,
         )
         clusters.extend(detach_superseded_cluster_sources(session, record))
-        match_confidence, rationale = _similarity(record, cluster)
+        match_confidence, rationale = _similarity(session, record, cluster)
         attach_cluster_source(session, cluster, record, match_confidence, rationale)
         clusters.append(cluster)
 

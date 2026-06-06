@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from job_scraper.kois.clustering import cluster_records
+from job_scraper.kois.clustering import _similarity, cluster_records
 from job_scraper.kois.digest import cluster_to_payload
 from job_scraper.kois.domain import RawIngestionItem
 from job_scraper.kois.extraction import RecordExtractor, make_cluster_key
@@ -528,6 +528,72 @@ def test_orchestrator_retries_pending_digests_not_touched_this_run(monkeypatch):
     assert result["clusters"] == 0
     assert result["digests"] == 1
     assert digest_item.sent_at is not None
+
+
+def test_similarity_does_not_credit_deadline_without_cluster_match():
+    session = _session()
+    raw_a = upsert_raw_source_item(
+        session,
+        RawIngestionItem(
+            source_type="scraper",
+            source_name="mercell",
+            external_id="deadline-a",
+            raw_body="raw-a",
+        ),
+    )
+    raw_b = upsert_raw_source_item(
+        session,
+        RawIngestionItem(
+            source_type="email",
+            source_name="oppdrag@kynd.no",
+            external_id="deadline-b",
+            raw_body="raw-b",
+        ),
+    )
+    first_record = create_extracted_record(
+        session,
+        {
+            "raw_source_item_id": raw_a.id,
+            "title": "Assignment",
+            "customer": "Kynd",
+            "broker": "mercell",
+            "source_url": "https://example.com/a",
+            "deadline": "2026-06-30",
+            "description": "desc",
+            "summary": "sum",
+            "extracted_data": {},
+            "extraction_confidence": 0.95,
+        },
+    )
+    second_record = create_extracted_record(
+        session,
+        {
+            "raw_source_item_id": raw_b.id,
+            "title": "Assignment",
+            "customer": "Kynd",
+            "broker": "email",
+            "source_url": "https://example.com/a",
+            "deadline": "2026-07-15",
+            "description": "desc",
+            "summary": "sum",
+            "extracted_data": {},
+            "extraction_confidence": 0.95,
+        },
+    )
+    cluster = create_or_update_cluster(
+        session=session,
+        cluster_key="https://example.com/a",
+        title="Assignment",
+        customer="Kynd",
+        confidence=0.95,
+        review_status=ReviewStatus.AUTO_ACCEPTED,
+    )
+    attach_cluster_source(session, cluster, first_record, confidence=0.9, rationale="url,title,customer,deadline")
+    session.commit()
+
+    score, rationale = _similarity(session, second_record, cluster)
+    assert "deadline" not in rationale.split(",")
+    assert score < 1.0
 
 
 def test_orchestrator_detaches_stale_cluster_source_when_reextraction_fails(monkeypatch):
