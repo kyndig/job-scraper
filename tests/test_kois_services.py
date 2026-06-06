@@ -311,6 +311,39 @@ def test_cluster_to_payload_uses_primary_source_deadline():
     assert payload.deadline == "2026-07-01"
 
 
+def test_raw_source_upsert_creates_separate_row_for_duplicate_body():
+    session = _session()
+    shared_body = "identical-body-content"
+    first = upsert_raw_source_item(
+        session,
+        RawIngestionItem(
+            source_type="email",
+            source_name="oppdrag@kynd.no",
+            external_id="<message-1@example.com>",
+            raw_body=shared_body,
+            metadata={"subject": "first"},
+        ),
+    )
+    second = upsert_raw_source_item(
+        session,
+        RawIngestionItem(
+            source_type="email",
+            source_name="oppdrag@kynd.no",
+            external_id="<message-2@example.com>",
+            raw_body=shared_body,
+            metadata={"subject": "second"},
+        ),
+    )
+    session.commit()
+
+    all_rows = session.execute(select(RawSourceItem)).scalars().all()
+    assert first.id != second.id
+    assert first.content_hash == second.content_hash
+    assert first.metadata_json == {"subject": "first"}
+    assert second.metadata_json == {"subject": "second"}
+    assert len(all_rows) == 2
+
+
 def test_raw_source_upsert_reuses_external_id_when_body_changes():
     session = _session()
     first = upsert_raw_source_item(
