@@ -330,6 +330,22 @@ def upsert_agreement_signal(session: Session, payload: dict) -> AgreementSignal:
     return created
 
 
+def delete_agreement_signal(
+    session: Session, *, source_name: str, external_id: str
+) -> bool:
+    existing = session.execute(
+        select(AgreementSignal).where(
+            AgreementSignal.source_name == source_name,
+            AgreementSignal.external_id == external_id,
+        )
+    ).scalar_one_or_none()
+    if existing is None:
+        return False
+    session.delete(existing)
+    session.flush()
+    return True
+
+
 def list_agreement_signals(
     session: Session,
     buyer_name: str | None = None,
