@@ -84,6 +84,7 @@ def set_gap_status(
     if not gap:
         raise ValueError(f"Agreement gap {gap_id} not found")
     gap.status = status
-    gap.note = note
+    if note is not None:
+        gap.note = note
     session.flush()
     return gap

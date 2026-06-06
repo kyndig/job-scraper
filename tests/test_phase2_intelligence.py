@@ -4,7 +4,7 @@ from job_scraper.kois.agreement_signals import build_agreement_signal_payload
 from job_scraper.kois.analytics import phase2_summary
 from job_scraper.kois.db import Base
 from job_scraper.kois.extraction import RecordExtractor
-from job_scraper.kois.gaps import discover_missing_agreement_gaps
+from job_scraper.kois.gaps import discover_missing_agreement_gaps, set_gap_status
 from job_scraper.kois.ingestion.procurement_adapter import fetch_procurement_items
 from job_scraper.kois.config import KOISSettings
 from job_scraper.kois.repository import (
@@ -282,3 +282,30 @@ def test_agreement_signal_detects_compact_agreement_type_values():
     payload = build_agreement_signal_payload(raw_item=raw, record=record)
     assert payload is not None
     assert payload["agreement_type"] == "frame"
+
+
+def test_set_gap_status_preserves_existing_note_when_note_is_omitted():
+    session = _session()
+    gap = upsert_agreement_gap(
+        session,
+        {
+            "gap_key": "buyer:trondheim",
+            "buyer_name": "Trondheim kommune",
+            "status": GapStatus.OPEN,
+            "confidence": 0.7,
+            "rationale": "Repeated demand",
+            "evidence_json": {"cluster_count": 2},
+        },
+    )
+    gap.note = "Needs legal validation"
+    session.flush()
+
+    updated = set_gap_status(
+        session=session,
+        gap_id=gap.id,
+        status=GapStatus.ACKNOWLEDGED,
+        actor="tester",
+        note=None,
+    )
+    assert updated.status == GapStatus.ACKNOWLEDGED
+    assert updated.note == "Needs legal validation"
