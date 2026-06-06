@@ -25,23 +25,26 @@ class DigestPayload:
     cluster_id: int
 
 
-def _resolve_cluster_deadline(cluster: OpportunityCluster) -> str | None:
+def _resolve_primary_record(cluster: OpportunityCluster):
     if not cluster.sources:
         return None
 
     if cluster.primary_source_record_id is not None:
         for source in cluster.sources:
             if source.extracted_record_id == cluster.primary_source_record_id:
-                return source.record.deadline
+                return source.record
 
-    return cluster.sources[0].record.deadline
+    return cluster.sources[0].record
 
 
 def cluster_to_payload(cluster: OpportunityCluster) -> DigestPayload:
+    primary_record = _resolve_primary_record(cluster)
     return DigestPayload(
-        title=cluster.title or "Untitled opportunity",
-        customer=cluster.customer,
-        deadline=_resolve_cluster_deadline(cluster),
+        title=(primary_record.title if primary_record else None)
+        or cluster.title
+        or "Untitled opportunity",
+        customer=(primary_record.customer if primary_record else None) or cluster.customer,
+        deadline=primary_record.deadline if primary_record else None,
         source_count=len(cluster.sources),
         primary_source_record_id=cluster.primary_source_record_id,
         confidence=cluster.confidence,
