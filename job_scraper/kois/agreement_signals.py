@@ -9,8 +9,11 @@ from job_scraper.kois.utils import normalize_text
 AGREEMENT_PHRASES = (
     "dps",
     "dynamic purchasing system",
+    "frame",
     "frame agreement",
+    "framework",
     "framework agreement",
+    "ramme",
     "rammeavtale",
     "ramme avtale",
 )
@@ -20,6 +23,9 @@ def _contains_agreement_phrase(text: str | None) -> bool:
     normalized = normalize_text(text)
     if not normalized:
         return False
+    # Procurement feeds often provide compact agreement labels ("frame", "dps").
+    if normalized in AGREEMENT_PHRASES:
+        return True
     return any(
         re.search(rf"\b{re.escape(keyword)}\b", normalized) for keyword in AGREEMENT_PHRASES
     )

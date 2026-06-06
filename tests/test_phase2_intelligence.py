@@ -243,3 +243,42 @@ def test_infer_source_kind_does_not_promote_generic_tender_scrapers():
         metadata={"platform": "Talent Tender Board"},
     )
     assert source_kind == SourceKind.BROKER
+
+
+def test_agreement_signal_detects_compact_agreement_type_values():
+    session = _session()
+    raw = upsert_raw_source_item(
+        session,
+        RawIngestionItem(
+            source_type="procurement",
+            source_name="feed",
+            external_id="compact-1",
+            raw_body='{"id":"compact-1"}',
+            metadata={
+                "notice_payload": {
+                    "title": "Cloud operations procurement",
+                    "buyer": "Oslo kommune",
+                    "agreement_type": "frame",
+                }
+            },
+        ),
+    )
+    record = create_extracted_record(
+        session,
+        {
+            "raw_source_item_id": raw.id,
+            "title": "Cloud operations procurement",
+            "customer": "Oslo kommune",
+            "broker": "feed",
+            "source_url": "https://example.com/compact-1",
+            "deadline": None,
+            "description": "procurement notice",
+            "summary": None,
+            "extraction_confidence": 0.8,
+            "extracted_data": {"agreement_type": "frame", "source_kind": "public_tender"},
+        },
+    )
+
+    payload = build_agreement_signal_payload(raw_item=raw, record=record)
+    assert payload is not None
+    assert payload["agreement_type"] == "frame"
