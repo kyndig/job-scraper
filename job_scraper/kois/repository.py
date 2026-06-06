@@ -233,3 +233,14 @@ def mark_digest_sent(session: Session, item: DigestItem, slack_ts: str | None) -
     item.slack_message_ts = slack_ts
     item.sent_at = datetime.now(timezone.utc)
     session.flush()
+
+
+def list_clusters_with_unsent_digests(session: Session) -> list[OpportunityCluster]:
+    return list(
+        session.execute(
+            select(OpportunityCluster)
+            .join(DigestItem, DigestItem.opportunity_cluster_id == OpportunityCluster.id)
+            .where(DigestItem.sent_at.is_(None))
+            .distinct()
+        ).scalars()
+    )
