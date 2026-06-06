@@ -12,7 +12,7 @@ def _session() -> Session:
     return Session(bind=engine, future=True)
 
 
-def test_raw_source_upsert_avoids_hash_collision_when_external_content_changes():
+def test_raw_source_upsert_updates_external_id_row_when_body_matches_existing_hash():
     session = _session()
     existing_by_external = upsert_raw_source_item(
         session,
@@ -30,6 +30,7 @@ def test_raw_source_upsert_avoids_hash_collision_when_external_content_changes()
             source_name="oppdrag@kynd.no",
             external_id="<message-2@example.com>",
             raw_body="body-two",
+            metadata={"subject": "message-two"},
         ),
     )
     collided = upsert_raw_source_item(
@@ -43,8 +44,13 @@ def test_raw_source_upsert_avoids_hash_collision_when_external_content_changes()
         ),
     )
     session.commit()
+    session.refresh(existing_by_hash)
 
     all_rows = session.execute(select(RawSourceItem)).scalars().all()
-    assert collided.id == existing_by_hash.id
-    assert existing_by_external.id != existing_by_hash.id
+    assert collided.id == existing_by_external.id
+    assert collided.external_id == "<message-1@example.com>"
+    assert collided.raw_body == "body-two"
+    assert collided.metadata_json == {"subject": "latest"}
+    assert existing_by_hash.raw_body == "body-two"
+    assert existing_by_hash.metadata_json == {"subject": "message-two"}
     assert len(all_rows) == 2
