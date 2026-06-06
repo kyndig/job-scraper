@@ -21,6 +21,10 @@ from job_scraper.kois.schema import (
 )
 from job_scraper.kois.utils import content_hash
 
+AGREEMENT_GAP_AUTO_CLOSE_NOTE = (
+    "Auto-closed after matching agreement signal detected for this buyer."
+)
+
 AUTOMATED_REVIEW_STATUSES = frozenset(
     {ReviewStatus.AUTO_ACCEPTED, ReviewStatus.NEEDS_REVIEW}
 )
@@ -351,6 +355,13 @@ def upsert_agreement_gap(session: Session, payload: dict) -> AgreementGap:
         existing.evidence_json = payload["evidence_json"]
         if existing.status == GapStatus.OPEN:
             existing.status = payload.get("status", GapStatus.OPEN)
+        elif (
+            existing.status == GapStatus.IGNORED
+            and existing.note == AGREEMENT_GAP_AUTO_CLOSE_NOTE
+        ):
+            existing.status = payload.get("status", GapStatus.OPEN)
+            if existing.status == GapStatus.OPEN:
+                existing.note = None
         session.flush()
         return existing
 
