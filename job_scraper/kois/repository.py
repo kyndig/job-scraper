@@ -33,6 +33,13 @@ def upsert_raw_source_item(session: Session, item: RawIngestionItem) -> RawSourc
         )
     ).scalar_one_or_none()
     if existing_by_external_id:
+        if existing_by_external_id.content_hash != item_hash:
+            existing_by_external_id.content_hash = item_hash
+            existing_by_external_id.raw_body = item.raw_body
+            existing_by_external_id.metadata_json = item.metadata
+            existing_by_external_id.received_at = item.received_at
+            existing_by_external_id.extraction_error = None
+            session.flush()
         return existing_by_external_id
 
     existing_by_hash = session.execute(

@@ -312,6 +312,7 @@ def test_raw_source_upsert_reuses_external_id_when_body_changes():
             raw_body="original-body",
         ),
     )
+    first_hash = first.content_hash
     second = upsert_raw_source_item(
         session,
         RawIngestionItem(
@@ -326,4 +327,62 @@ def test_raw_source_upsert_reuses_external_id_when_body_changes():
     all_rows = session.execute(select(RawSourceItem)).scalars().all()
     assert second.id == first.id
     assert len(all_rows) == 1
+    assert second.raw_body == "updated-body"
+    assert second.content_hash != first_hash
+
+
+def test_orchestrator_reextracts_when_raw_body_changes(monkeypatch):
+    from job_scraper.kois.orchestrator import run_kois_pipeline
+
+    session = _session()
+    monkeypatch.setattr(
+        "job_scraper.kois.orchestrator.fetch_imap_items",
+        lambda settings: [],
+    )
+    monkeypatch.setattr(
+        "job_scraper.kois.orchestrator.get_settings",
+        lambda: type(
+            "Settings",
+            (),
+            {
+                "gemini_api_key": None,
+                "run_live_slack": False,
+                "slack_channel": "job-posting",
+            },
+        )(),
+    )
+
+    first_job = Job(
+        job_overview=JobOverview(
+            title="Data Engineer",
+            company="Kynd",
+            delivery_date="2026-06-30",
+            job_uri="https://example.com/jobs/1",
+        ),
+        description="First description",
+        platform="Mercell",
+    )
+    second_job = Job(
+        job_overview=JobOverview(
+            title="Data Engineer",
+            company="Kynd",
+            delivery_date="2026-07-15",
+            job_uri="https://example.com/jobs/1",
+        ),
+        description="Updated description",
+        platform="Mercell",
+    )
+
+    run_kois_pipeline(session=session, scraped_jobs=[first_job])
+    run_kois_pipeline(session=session, scraped_jobs=[second_job])
+
+    raw_rows = session.execute(select(RawSourceItem)).scalars().all()
+    extracted_rows = session.execute(select(ExtractedRecord)).scalars().all()
+
+    assert len(raw_rows) == 1
+    assert len(extracted_rows) == 2
+    latest_record = extracted_rows[-1]
+    assert latest_record.description == "Updated description"
+    assert latest_record.deadline == "2026-07-15"
+
 
