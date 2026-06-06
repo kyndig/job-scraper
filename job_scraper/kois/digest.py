@@ -70,6 +70,9 @@ def send_digest_items(
 ) -> list[dict]:
     sent_payloads: list[dict] = []
     for cluster in clusters:
+        if not cluster.sources:
+            delete_unsent_digest_items(session, cluster)
+            continue
         if cluster.review_status in (ReviewStatus.IGNORED, ReviewStatus.WATCH_ONLY):
             delete_unsent_digest_items(session, cluster)
             continue

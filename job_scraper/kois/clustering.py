@@ -1,14 +1,21 @@
 from collections import defaultdict
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from job_scraper.kois.extraction import make_cluster_key
 from job_scraper.kois.repository import (
     attach_cluster_source,
     create_or_update_cluster,
+    detach_superseded_cluster_sources,
     upsert_source_comparison,
 )
-from job_scraper.kois.schema import ExtractedRecord, OpportunityCluster, ReviewStatus
+from job_scraper.kois.schema import (
+    ExtractedRecord,
+    OpportunityCluster,
+    ReviewStatus,
+    SourceComparison,
+)
 from job_scraper.kois.utils import normalize_text, normalize_url
 
 
@@ -97,6 +104,7 @@ def cluster_records(session: Session, records: list[ExtractedRecord]) -> list[Op
             confidence=confidence,
             review_status=review_status,
         )
+        clusters.extend(detach_superseded_cluster_sources(session, record))
         match_confidence, rationale = _similarity(record, cluster)
         attach_cluster_source(session, cluster, record, match_confidence, rationale)
         clusters.append(cluster)
@@ -117,14 +125,28 @@ def _refresh_comparisons(session: Session, clusters: list[OpportunityCluster]) -
                 if value:
                     field_values[field_name].add(value)
 
-        for field_name, values in field_values.items():
-            if len(values) > 1:
-                upsert_source_comparison(
-                    session=session,
-                    cluster=cluster,
-                    field_name=field_name,
-                    values={"values": sorted(values)},
+        divergent_values = {
+            field_name: values for field_name, values in field_values.items() if len(values) > 1
+        }
+        existing_comparisons = list(
+            session.execute(
+                select(SourceComparison).where(
+                    SourceComparison.opportunity_cluster_id == cluster.id
                 )
+            ).scalars()
+        )
+        for comparison in existing_comparisons:
+            if comparison.field_name not in divergent_values:
+                session.delete(comparison)
+
+        for field_name, values in divergent_values.items():
+            upsert_source_comparison(
+                session=session,
+                cluster=cluster,
+                field_name=field_name,
+                values={"values": sorted(values)},
+            )
+        session.flush()
 
 
 def _refresh_primary_sources(session: Session, clusters: list[OpportunityCluster]) -> None:
@@ -132,6 +154,8 @@ def _refresh_primary_sources(session: Session, clusters: list[OpportunityCluster
     for cluster in unique_clusters:
         sources = [source.record for source in cluster.sources]
         if not sources:
+            cluster.primary_source_record_id = None
+            session.flush()
             continue
         primary = sorted(
             sources,

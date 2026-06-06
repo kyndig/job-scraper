@@ -151,6 +151,30 @@ def attach_cluster_source(
     return source
 
 
+def detach_superseded_cluster_sources(
+    session: Session, record: ExtractedRecord
+) -> list[OpportunityCluster]:
+    stale_links = list(
+        session.execute(
+            select(ClusterSource)
+            .join(ExtractedRecord)
+            .where(
+                ExtractedRecord.raw_source_item_id == record.raw_source_item_id,
+                ClusterSource.extracted_record_id != record.id,
+            )
+        ).scalars()
+    )
+    affected_clusters = []
+    for link in stale_links:
+        affected_clusters.append(link.cluster)
+        session.delete(link)
+    if stale_links:
+        session.flush()
+        for cluster in affected_clusters:
+            session.expire(cluster, ["sources"])
+    return affected_clusters
+
+
 def create_source_comparison(
     session: Session, cluster: OpportunityCluster, field_name: str, values: dict
 ) -> SourceComparison:
