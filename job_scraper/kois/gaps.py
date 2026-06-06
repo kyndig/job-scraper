@@ -5,7 +5,10 @@ from collections import defaultdict
 from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
-from job_scraper.kois.repository import upsert_agreement_gap
+from job_scraper.kois.repository import (
+    AGREEMENT_GAP_AUTO_CLOSE_NOTE,
+    upsert_agreement_gap,
+)
 from job_scraper.kois.schema import (
     AgreementGap,
     AgreementSignal,
@@ -56,9 +59,7 @@ def discover_missing_agreement_gaps(
                 if gap.status not in {GapStatus.OPEN, GapStatus.ACKNOWLEDGED}:
                     continue
                 gap.status = GapStatus.IGNORED
-                gap.note = (
-                    "Auto-closed after matching agreement signal detected for this buyer."
-                )
+                gap.note = AGREEMENT_GAP_AUTO_CLOSE_NOTE
                 session.flush()
                 persisted.append(gap)
             continue

@@ -8,6 +8,7 @@ from job_scraper.kois.gaps import discover_missing_agreement_gaps, set_gap_statu
 from job_scraper.kois.ingestion.procurement_adapter import fetch_procurement_items
 from job_scraper.kois.config import KOISSettings
 from job_scraper.kois.repository import (
+    AGREEMENT_GAP_AUTO_CLOSE_NOTE,
     create_extracted_record,
     detach_record_cluster_sources,
     list_agreement_gaps,
@@ -173,6 +174,70 @@ def test_phase2_summary_contract():
     session = _session()
     summary = phase2_summary(session)
     assert set(summary) == {"buyer_trends", "broker_patterns", "source_quality", "coverage"}
+
+
+def test_gap_upsert_reopens_auto_closed_gap_when_coverage_missing_again():
+    session = _session()
+    gap = upsert_agreement_gap(
+        session,
+        {
+            "gap_key": "buyer:bergen",
+            "buyer_name": "Bergen kommune",
+            "status": GapStatus.OPEN,
+            "confidence": 0.7,
+            "rationale": "Repeated demand",
+            "evidence_json": {"cluster_count": 2},
+        },
+    )
+    gap.status = GapStatus.IGNORED
+    gap.note = AGREEMENT_GAP_AUTO_CLOSE_NOTE
+    session.flush()
+
+    reopened = upsert_agreement_gap(
+        session,
+        {
+            "gap_key": "buyer:bergen",
+            "buyer_name": "Bergen kommune",
+            "status": GapStatus.OPEN,
+            "confidence": 0.8,
+            "rationale": "Repeated demand",
+            "evidence_json": {"cluster_count": 3},
+        },
+    )
+    assert reopened.status == GapStatus.OPEN
+    assert reopened.note is None
+
+
+def test_gap_upsert_preserves_user_ignored_status():
+    session = _session()
+    gap = upsert_agreement_gap(
+        session,
+        {
+            "gap_key": "buyer:stavanger",
+            "buyer_name": "Stavanger kommune",
+            "status": GapStatus.OPEN,
+            "confidence": 0.7,
+            "rationale": "Repeated demand",
+            "evidence_json": {"cluster_count": 2},
+        },
+    )
+    gap.status = GapStatus.IGNORED
+    gap.note = "Not actionable for this quarter."
+    session.flush()
+
+    updated = upsert_agreement_gap(
+        session,
+        {
+            "gap_key": "buyer:stavanger",
+            "buyer_name": "Stavanger kommune",
+            "status": GapStatus.OPEN,
+            "confidence": 0.8,
+            "rationale": "Repeated demand",
+            "evidence_json": {"cluster_count": 3},
+        },
+    )
+    assert updated.status == GapStatus.IGNORED
+    assert updated.note == "Not actionable for this quarter."
 
 
 def test_gap_upsert_preserves_acknowledged_status():
