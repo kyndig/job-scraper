@@ -15,6 +15,7 @@ from job_scraper.kois.ingestion.scraper_adapter import jobs_to_raw_items
 from job_scraper.kois.repository import (
     create_extracted_record,
     get_extracted_record_for_raw_source,
+    list_clusters_with_unsent_digests,
     upsert_raw_source_item,
 )
 from job_scraper.models import Job
@@ -61,7 +62,11 @@ def run_kois_pipeline(
             raw_item.extraction_error = str(exc)
             session.flush()
 
-    clusters = cluster_records(session, records)
+    touched_clusters = cluster_records(session, records)
+    pending_clusters = list_clusters_with_unsent_digests(session)
+    clusters = list(
+        {cluster.id: cluster for cluster in [*touched_clusters, *pending_clusters]}.values()
+    )
     slack = SlackPoster(optional=True)
     digests = send_digest_items(
         session=session,
@@ -74,6 +79,6 @@ def run_kois_pipeline(
     return {
         "raw_items": len(raw_items),
         "records": len(records),
-        "clusters": len({cluster.id for cluster in clusters}),
+        "clusters": len({cluster.id for cluster in touched_clusters}),
         "digests": len(digests),
     }

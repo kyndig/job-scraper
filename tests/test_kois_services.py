@@ -11,6 +11,7 @@ from job_scraper.kois.repository import (
     create_extracted_record,
     create_or_update_cluster,
     get_extracted_record_for_raw_source,
+    list_clusters_with_unsent_digests,
     mark_digest_sent,
     upsert_raw_source_item,
 )
@@ -384,5 +385,72 @@ def test_orchestrator_reextracts_when_raw_body_changes(monkeypatch):
     latest_record = extracted_rows[-1]
     assert latest_record.description == "Updated description"
     assert latest_record.deadline == "2026-07-15"
+
+
+def test_list_clusters_with_unsent_digests_returns_retry_candidates():
+    session = _session()
+    cluster = create_or_update_cluster(
+        session=session,
+        cluster_key="cluster-retry",
+        title="Retry me",
+        customer="Kynd",
+        confidence=0.9,
+        review_status=ReviewStatus.AUTO_ACCEPTED,
+    )
+    create_digest_item(
+        session=session,
+        cluster=cluster,
+        status=ReviewStatus.AUTO_ACCEPTED,
+        payload={"cluster_id": cluster.id},
+    )
+    session.commit()
+
+    pending_clusters = list_clusters_with_unsent_digests(session)
+    assert [item.id for item in pending_clusters] == [cluster.id]
+
+
+def test_orchestrator_retries_pending_digests_not_touched_this_run(monkeypatch):
+    from job_scraper.kois.orchestrator import run_kois_pipeline
+
+    session = _session()
+    cluster = create_or_update_cluster(
+        session=session,
+        cluster_key="cluster-pending-retry",
+        title="Pending digest",
+        customer="Kynd",
+        confidence=0.9,
+        review_status=ReviewStatus.AUTO_ACCEPTED,
+    )
+    create_digest_item(
+        session=session,
+        cluster=cluster,
+        status=ReviewStatus.AUTO_ACCEPTED,
+        payload={"cluster_id": cluster.id, "review_status": ReviewStatus.AUTO_ACCEPTED.value},
+    )
+    session.commit()
+
+    monkeypatch.setattr(
+        "job_scraper.kois.orchestrator.fetch_imap_items",
+        lambda settings: [],
+    )
+    monkeypatch.setattr(
+        "job_scraper.kois.orchestrator.get_settings",
+        lambda: type(
+            "Settings",
+            (),
+            {
+                "gemini_api_key": None,
+                "run_live_slack": False,
+                "slack_channel": "job-posting",
+            },
+        )(),
+    )
+
+    result = run_kois_pipeline(session=session, scraped_jobs=[])
+    digest_item = session.execute(select(DigestItem)).scalar_one()
+
+    assert result["clusters"] == 0
+    assert result["digests"] == 1
+    assert digest_item.sent_at is not None
 
 
