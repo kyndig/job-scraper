@@ -18,6 +18,10 @@ from job_scraper.kois.schema import (
 )
 from job_scraper.kois.utils import content_hash
 
+AUTOMATED_REVIEW_STATUSES = frozenset(
+    {ReviewStatus.AUTO_ACCEPTED, ReviewStatus.NEEDS_REVIEW}
+)
+
 
 def upsert_raw_source_item(session: Session, item: RawIngestionItem) -> RawSourceItem:
     item_hash = content_hash(item.raw_body)
@@ -74,7 +78,8 @@ def create_or_update_cluster(
         cluster.title = cluster.title or title
         cluster.customer = cluster.customer or customer
         cluster.confidence = max(cluster.confidence, confidence)
-        cluster.review_status = review_status
+        if cluster.review_status in AUTOMATED_REVIEW_STATUSES:
+            cluster.review_status = review_status
         session.flush()
         return cluster
 

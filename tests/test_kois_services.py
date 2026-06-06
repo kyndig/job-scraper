@@ -6,6 +6,7 @@ from job_scraper.kois.domain import RawIngestionItem
 from job_scraper.kois.extraction import RecordExtractor
 from job_scraper.kois.repository import (
     create_extracted_record,
+    create_or_update_cluster,
     get_extracted_record_for_raw_source,
     upsert_raw_source_item,
 )
@@ -110,3 +111,30 @@ def test_extracted_record_is_reused_for_existing_raw_source():
     assert session.execute(select(ExtractedRecord)).scalars().all() == [first_record]
     assert len(session.execute(select(ClusterSource)).scalars().all()) == 1
     assert clusters_first[0].id == clusters_second[0].id
+
+
+def test_create_or_update_cluster_preserves_reviewer_status():
+    session = _session()
+    cluster = create_or_update_cluster(
+        session=session,
+        cluster_key="manual-review",
+        title="Assignment",
+        customer="Kynd",
+        confidence=0.7,
+        review_status=ReviewStatus.IGNORED,
+    )
+    session.commit()
+
+    updated = create_or_update_cluster(
+        session=session,
+        cluster_key="manual-review",
+        title="Assignment",
+        customer="Kynd",
+        confidence=0.95,
+        review_status=ReviewStatus.AUTO_ACCEPTED,
+    )
+    session.commit()
+
+    assert updated.id == cluster.id
+    assert updated.review_status == ReviewStatus.IGNORED
+    assert updated.confidence == 0.95
