@@ -156,7 +156,7 @@ def test_create_or_update_cluster_preserves_reviewer_status():
 
 def test_refresh_comparisons_is_idempotent():
     session = _session()
-    raw = upsert_raw_source_item(
+    raw_a = upsert_raw_source_item(
         session,
         RawIngestionItem(
             source_type="scraper",
@@ -165,10 +165,19 @@ def test_refresh_comparisons_is_idempotent():
             raw_body="raw-1",
         ),
     )
+    raw_b = upsert_raw_source_item(
+        session,
+        RawIngestionItem(
+            source_type="email",
+            source_name="oppdrag@kynd.no",
+            external_id="id-2",
+            raw_body="raw-2",
+        ),
+    )
     record_a = create_extracted_record(
         session,
         {
-            "raw_source_item_id": raw.id,
+            "raw_source_item_id": raw_a.id,
             "title": "Assignment A",
             "customer": "Kynd",
             "broker": "mercell",
@@ -183,7 +192,7 @@ def test_refresh_comparisons_is_idempotent():
     record_b = create_extracted_record(
         session,
         {
-            "raw_source_item_id": raw.id,
+            "raw_source_item_id": raw_b.id,
             "title": "Assignment B",
             "customer": "Kynd",
             "broker": "email",
@@ -379,12 +388,21 @@ def test_orchestrator_reextracts_when_raw_body_changes(monkeypatch):
 
     raw_rows = session.execute(select(RawSourceItem)).scalars().all()
     extracted_rows = session.execute(select(ExtractedRecord)).scalars().all()
+    cluster = session.execute(select(OpportunityCluster)).scalar_one()
+    cluster_sources = session.execute(select(ClusterSource)).scalars().all()
+    comparisons = session.execute(select(SourceComparison)).scalars().all()
 
     assert len(raw_rows) == 1
     assert len(extracted_rows) == 2
     latest_record = extracted_rows[-1]
     assert latest_record.description == "Updated description"
     assert latest_record.deadline == "2026-07-15"
+    assert len(cluster_sources) == 1
+    assert cluster_sources[0].extracted_record_id == latest_record.id
+    assert cluster.primary_source_record_id == latest_record.id
+    assert cluster_to_payload(cluster).source_count == 1
+    assert cluster_to_payload(cluster).deadline == "2026-07-15"
+    assert comparisons == []
 
 
 def test_list_clusters_with_unsent_digests_returns_retry_candidates():
@@ -421,6 +439,31 @@ def test_orchestrator_retries_pending_digests_not_touched_this_run(monkeypatch):
         confidence=0.9,
         review_status=ReviewStatus.AUTO_ACCEPTED,
     )
+    raw = upsert_raw_source_item(
+        session,
+        RawIngestionItem(
+            source_type="scraper",
+            source_name="mercell",
+            external_id="pending-source",
+            raw_body="pending raw body",
+        ),
+    )
+    record = create_extracted_record(
+        session,
+        {
+            "raw_source_item_id": raw.id,
+            "title": "Pending digest",
+            "customer": "Kynd",
+            "broker": "mercell",
+            "source_url": "https://example.com/pending",
+            "deadline": "2026-06-30",
+            "description": "desc",
+            "summary": "sum",
+            "extracted_data": {},
+            "extraction_confidence": 0.95,
+        },
+    )
+    attach_cluster_source(session, cluster, record, confidence=0.95, rationale="url")
     create_digest_item(
         session=session,
         cluster=cluster,
