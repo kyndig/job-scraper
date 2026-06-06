@@ -42,12 +42,6 @@ def upsert_raw_source_item(session: Session, item: RawIngestionItem) -> RawSourc
             session.flush()
         return existing_by_external_id
 
-    existing_by_hash = session.execute(
-        select(RawSourceItem).where(RawSourceItem.content_hash == item_hash)
-    ).scalar_one_or_none()
-    if existing_by_hash:
-        return existing_by_hash
-
     raw = RawSourceItem(
         source_type=item.source_type,
         source_name=item.source_name,
