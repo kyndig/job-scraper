@@ -47,14 +47,16 @@ def infer_source_kind(
 
     if "doffin" in fingerprint:
         return SourceKind.PUBLIC_TENDER
-    if "procurement" in fingerprint or "tender" in fingerprint:
-        return SourceKind.PROCUREMENT_PLATFORM
     if source_type_value == "email":
         return SourceKind.EMAIL_FORWARDED
+    if source_type_value == "procurement":
+        return SourceKind.PROCUREMENT_PLATFORM
+    if "procurement" in fingerprint or "anskaff" in fingerprint:
+        return SourceKind.PROCUREMENT_PLATFORM
+    if source_type_value in {"scraper", "broker"}:
+        return SourceKind.BROKER
     if "direct" in fingerprint:
         return SourceKind.DIRECT
     if "manual" in fingerprint:
         return SourceKind.MANUAL
-    if source_type_value in {"scraper", "procurement"}:
-        return SourceKind.BROKER
     return SourceKind.UNKNOWN

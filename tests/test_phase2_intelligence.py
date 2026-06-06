@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+from job_scraper.kois.agreement_signals import build_agreement_signal_payload
 from job_scraper.kois.analytics import phase2_summary
 from job_scraper.kois.db import Base
 from job_scraper.kois.extraction import RecordExtractor
@@ -9,13 +10,14 @@ from job_scraper.kois.config import KOISSettings
 from job_scraper.kois.repository import (
     create_extracted_record,
     list_agreement_gaps,
+    upsert_agreement_gap,
     upsert_agreement_signal,
     upsert_raw_source_item,
 )
 from job_scraper.kois import review_api
 from job_scraper.kois.schema import GapStatus
 from job_scraper.kois.clustering import cluster_records
-from job_scraper.kois.domain import RawIngestionItem
+from job_scraper.kois.domain import RawIngestionItem, SourceKind, infer_source_kind
 
 
 def _session() -> Session:
@@ -143,11 +145,16 @@ def test_agreement_gap_discovery_and_api():
     )
     session.commit()
 
+    discover_missing_agreement_gaps(session, min_cluster_hits=1)
+    session.commit()
+
     summary = review_api.analytics_summary(session)
     assert "coverage" in summary
+    assert summary["coverage"]["open_gap_count"] == 0
 
     gaps_response = review_api.agreement_gaps(status=None, session=session)
     assert len(gaps_response) >= 1
+    assert gaps_response[0]["status"] == GapStatus.IGNORED.value
 
     patch_response = review_api.update_agreement_gap_status(
         gap_id=gaps[0].id,
@@ -165,3 +172,74 @@ def test_phase2_summary_contract():
     session = _session()
     summary = phase2_summary(session)
     assert set(summary) == {"buyer_trends", "broker_patterns", "source_quality", "coverage"}
+
+
+def test_gap_upsert_preserves_acknowledged_status():
+    session = _session()
+    created = upsert_agreement_gap(
+        session,
+        {
+            "gap_key": "buyer:oslo",
+            "buyer_name": "Oslo kommune",
+            "status": GapStatus.OPEN,
+            "confidence": 0.6,
+            "rationale": "initial",
+            "evidence_json": {"cluster_count": 2},
+        },
+    )
+    created.status = GapStatus.ACKNOWLEDGED
+    session.flush()
+
+    updated = upsert_agreement_gap(
+        session,
+        {
+            "gap_key": "buyer:oslo",
+            "buyer_name": "Oslo kommune",
+            "status": GapStatus.OPEN,
+            "confidence": 0.8,
+            "rationale": "updated",
+            "evidence_json": {"cluster_count": 3},
+        },
+    )
+    assert updated.status == GapStatus.ACKNOWLEDGED
+
+
+def test_agreement_signal_detection_ignores_non_procurement_framework_mentions():
+    session = _session()
+    raw = upsert_raw_source_item(
+        session,
+        RawIngestionItem(
+            source_type="scraper",
+            source_name="broker-feed",
+            external_id="s-1",
+            raw_body="framework-heavy assignment",
+            metadata={},
+        ),
+    )
+    record = create_extracted_record(
+        session,
+        {
+            "raw_source_item_id": raw.id,
+            "title": "Senior engineer assignment",
+            "customer": "City",
+            "broker": "Broker",
+            "source_url": "https://example.com/s-1",
+            "deadline": None,
+            "description": "Requires deep experience in framework migration work.",
+            "summary": None,
+            "extraction_confidence": 0.7,
+            "extracted_data": {"source_kind": "broker"},
+        },
+    )
+
+    payload = build_agreement_signal_payload(raw_item=raw, record=record)
+    assert payload is None
+
+
+def test_infer_source_kind_does_not_promote_generic_tender_scrapers():
+    source_kind = infer_source_kind(
+        source_type="scraper",
+        source_name="tender-hub-broker",
+        metadata={"platform": "Talent Tender Board"},
+    )
+    assert source_kind == SourceKind.BROKER
