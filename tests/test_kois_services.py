@@ -10,7 +10,14 @@ from job_scraper.kois.repository import (
     get_extracted_record_for_raw_source,
     upsert_raw_source_item,
 )
-from job_scraper.kois.schema import Base, ClusterSource, ExtractedRecord, OpportunityCluster, ReviewStatus
+from job_scraper.kois.schema import (
+    Base,
+    ClusterSource,
+    ExtractedRecord,
+    OpportunityCluster,
+    ReviewStatus,
+    SourceComparison,
+)
 from job_scraper.models import Job, JobOverview
 
 
@@ -138,3 +145,55 @@ def test_create_or_update_cluster_preserves_reviewer_status():
     assert updated.id == cluster.id
     assert updated.review_status == ReviewStatus.IGNORED
     assert updated.confidence == 0.95
+
+
+def test_refresh_comparisons_is_idempotent():
+    session = _session()
+    raw = upsert_raw_source_item(
+        session,
+        RawIngestionItem(
+            source_type="scraper",
+            source_name="mercell",
+            external_id="id-1",
+            raw_body="raw-1",
+        ),
+    )
+    record_a = create_extracted_record(
+        session,
+        {
+            "raw_source_item_id": raw.id,
+            "title": "Assignment A",
+            "customer": "Kynd",
+            "broker": "mercell",
+            "source_url": "https://example.com/a",
+            "deadline": "2026-06-30",
+            "description": "desc",
+            "summary": "sum",
+            "extracted_data": {},
+            "extraction_confidence": 0.95,
+        },
+    )
+    record_b = create_extracted_record(
+        session,
+        {
+            "raw_source_item_id": raw.id,
+            "title": "Assignment B",
+            "customer": "Kynd",
+            "broker": "email",
+            "source_url": "https://example.com/a",
+            "deadline": "2026-06-30",
+            "description": "desc",
+            "summary": "sum",
+            "extracted_data": {},
+            "extraction_confidence": 0.95,
+        },
+    )
+    cluster_records(session, [record_a, record_b])
+    first_pass = session.execute(select(SourceComparison)).scalars().all()
+    cluster_records(session, [record_a, record_b])
+    second_pass = session.execute(select(SourceComparison)).scalars().all()
+    session.commit()
+
+    assert len(first_pass) == len(second_pass)
+    assert {comparison.field_name for comparison in second_pass} == {"title", "broker"}
+

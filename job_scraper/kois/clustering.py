@@ -6,7 +6,7 @@ from job_scraper.kois.extraction import make_cluster_key
 from job_scraper.kois.repository import (
     attach_cluster_source,
     create_or_update_cluster,
-    create_source_comparison,
+    upsert_source_comparison,
 )
 from job_scraper.kois.schema import ExtractedRecord, OpportunityCluster, ReviewStatus
 from job_scraper.kois.utils import normalize_text, normalize_url
@@ -95,7 +95,7 @@ def _refresh_comparisons(session: Session, clusters: list[OpportunityCluster]) -
 
         for field_name, values in field_values.items():
             if len(values) > 1:
-                create_source_comparison(
+                upsert_source_comparison(
                     session=session,
                     cluster=cluster,
                     field_name=field_name,
