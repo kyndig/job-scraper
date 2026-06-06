@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import re
 
-from job_scraper.kois.schema import ExtractedRecord, RawSourceItem
+from sqlalchemy.orm import Session
+
+from job_scraper.kois.repository import delete_agreement_signal, upsert_agreement_signal
+from job_scraper.kois.schema import AgreementSignal, ExtractedRecord, RawSourceItem
 from job_scraper.kois.utils import normalize_text
 
 
@@ -86,3 +89,19 @@ def build_agreement_signal_payload(
             "raw_source_type": raw_item.source_type,
         },
     }
+
+
+def sync_procurement_agreement_signal(
+    session: Session, raw_item: RawSourceItem, record: ExtractedRecord
+) -> AgreementSignal | None:
+    if raw_item.source_type != "procurement":
+        return None
+    signal_payload = build_agreement_signal_payload(raw_item=raw_item, record=record)
+    if signal_payload:
+        return upsert_agreement_signal(session, signal_payload)
+    delete_agreement_signal(
+        session,
+        source_name=raw_item.source_name,
+        external_id=raw_item.external_id,
+    )
+    return None
