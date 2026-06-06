@@ -135,6 +135,22 @@ def create_source_comparison(
     return comparison
 
 
+def upsert_source_comparison(
+    session: Session, cluster: OpportunityCluster, field_name: str, values: dict
+) -> SourceComparison:
+    comparison = session.execute(
+        select(SourceComparison).where(
+            SourceComparison.opportunity_cluster_id == cluster.id,
+            SourceComparison.field_name == field_name,
+        )
+    ).scalar_one_or_none()
+    if comparison:
+        comparison.values_json = values
+        session.flush()
+        return comparison
+    return create_source_comparison(session, cluster, field_name, values)
+
+
 def create_review_state(
     session: Session,
     cluster: OpportunityCluster,
