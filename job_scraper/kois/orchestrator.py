@@ -5,7 +5,7 @@ from collections.abc import Iterable
 
 from sqlalchemy.orm import Session
 
-from job_scraper.kois.agreement_signals import build_agreement_signal_payload
+from job_scraper.kois.agreement_signals import sync_procurement_agreement_signal
 from job_scraper.kois.clustering import cluster_records, refresh_clusters
 from job_scraper.kois.config import get_settings
 from job_scraper.kois.digest import send_digest_items
@@ -20,7 +20,6 @@ from job_scraper.kois.repository import (
     detach_record_cluster_sources,
     get_extracted_record_for_raw_source,
     list_clusters_with_unsent_digests,
-    upsert_agreement_signal,
     upsert_raw_source_item,
 )
 from job_scraper.models import Job
@@ -81,9 +80,7 @@ def run_kois_pipeline(
         record = record_by_raw_source_id.get(raw_item.id)
         if record is None:
             continue
-        signal_payload = build_agreement_signal_payload(raw_item=raw_item, record=record)
-        if signal_payload:
-            upsert_agreement_signal(session, signal_payload)
+        sync_procurement_agreement_signal(session, raw_item=raw_item, record=record)
     discovered_gaps = discover_missing_agreement_gaps(
         session,
         min_cluster_hits=getattr(settings, "agreement_gap_min_cluster_hits", 2),
