@@ -235,6 +235,18 @@ def mark_digest_sent(session: Session, item: DigestItem, slack_ts: str | None) -
     session.flush()
 
 
+def delete_unsent_digest_items(session: Session, cluster: OpportunityCluster) -> None:
+    unsent_items = session.execute(
+        select(DigestItem).where(
+            DigestItem.opportunity_cluster_id == cluster.id,
+            DigestItem.sent_at.is_(None),
+        )
+    ).scalars()
+    for item in unsent_items:
+        session.delete(item)
+    session.flush()
+
+
 def list_clusters_with_unsent_digests(session: Session) -> list[OpportunityCluster]:
     return list(
         session.execute(

@@ -4,7 +4,11 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
-from job_scraper.kois.repository import create_digest_item, mark_digest_sent
+from job_scraper.kois.repository import (
+    create_digest_item,
+    delete_unsent_digest_items,
+    mark_digest_sent,
+)
 from job_scraper.kois.schema import OpportunityCluster, ReviewStatus
 from job_scraper.slack_poster import SlackPoster
 
@@ -65,7 +69,13 @@ def send_digest_items(
     channel: str,
 ) -> list[dict]:
     sent_payloads: list[dict] = []
-    for cluster in select_digest_candidates(clusters):
+    for cluster in clusters:
+        if cluster.review_status in (ReviewStatus.IGNORED, ReviewStatus.WATCH_ONLY):
+            delete_unsent_digest_items(session, cluster)
+            continue
+        if cluster.review_status == ReviewStatus.NEEDS_REVIEW and cluster.confidence < 0.75:
+            continue
+
         payload = cluster_to_payload(cluster)
         digest_item = create_digest_item(
             session=session,
