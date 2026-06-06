@@ -28,7 +28,6 @@ class RawSourceItem(Base):
             "external_id",
             name="uq_raw_source_external_id",
         ),
-        UniqueConstraint("content_hash", name="uq_raw_source_content_hash"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
