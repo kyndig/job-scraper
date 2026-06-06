@@ -41,6 +41,17 @@ def upsert_raw_source_item(session: Session, item: RawIngestionItem) -> RawSourc
     return raw
 
 
+def get_extracted_record_for_raw_source(
+    session: Session, raw_source_item_id: int
+) -> ExtractedRecord | None:
+    return session.execute(
+        select(ExtractedRecord)
+        .where(ExtractedRecord.raw_source_item_id == raw_source_item_id)
+        .order_by(ExtractedRecord.id.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+
 def create_extracted_record(session: Session, payload: dict) -> ExtractedRecord:
     record = ExtractedRecord(**payload)
     session.add(record)

@@ -4,8 +4,12 @@ from sqlalchemy.orm import Session
 from job_scraper.kois.clustering import cluster_records
 from job_scraper.kois.domain import RawIngestionItem
 from job_scraper.kois.extraction import RecordExtractor
-from job_scraper.kois.repository import create_extracted_record, upsert_raw_source_item
-from job_scraper.kois.schema import Base, OpportunityCluster, ReviewStatus
+from job_scraper.kois.repository import (
+    create_extracted_record,
+    get_extracted_record_for_raw_source,
+    upsert_raw_source_item,
+)
+from job_scraper.kois.schema import Base, ClusterSource, ExtractedRecord, OpportunityCluster, ReviewStatus
 from job_scraper.models import Job, JobOverview
 
 
@@ -66,3 +70,43 @@ def test_extraction_and_clustering_creates_review_status():
         ReviewStatus.NEEDS_REVIEW,
     )
     assert stored_cluster.primary_source_record_id == record.id
+
+
+def test_extracted_record_is_reused_for_existing_raw_source():
+    session = _session()
+    extractor = RecordExtractor(summarizer=None)
+    job = Job(
+        job_overview=JobOverview(
+            title="Data Engineer",
+            company="Kynd",
+            delivery_date="2026-06-30",
+            job_uri="https://example.com/jobs/1",
+        ),
+        description="Build data pipelines",
+        platform="Mercell",
+    )
+    raw = upsert_raw_source_item(
+        session,
+        RawIngestionItem(
+            source_type="scraper",
+            source_name="mercell",
+            external_id="https://example.com/jobs/1",
+            raw_body=job.model_dump_json(),
+            metadata={"platform": "Mercell"},
+        ),
+    )
+    payload = extractor.extract(raw)
+    first_record = create_extracted_record(session, payload)
+    session.commit()
+
+    second_record = get_extracted_record_for_raw_source(session, raw.id)
+    assert second_record is not None
+    assert second_record.id == first_record.id
+
+    clusters_first = cluster_records(session, [first_record])
+    clusters_second = cluster_records(session, [second_record])
+    session.commit()
+
+    assert session.execute(select(ExtractedRecord)).scalars().all() == [first_record]
+    assert len(session.execute(select(ClusterSource)).scalars().all()) == 1
+    assert clusters_first[0].id == clusters_second[0].id
