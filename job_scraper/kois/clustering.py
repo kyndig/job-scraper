@@ -81,6 +81,13 @@ def _similarity(record: ExtractedRecord, cluster: OpportunityCluster) -> tuple[f
     return min(score, 1.0), ",".join(parts) or "weak-match"
 
 
+def refresh_clusters(session: Session, clusters: list[OpportunityCluster]) -> None:
+    if not clusters:
+        return
+    _refresh_comparisons(session, clusters)
+    _refresh_primary_sources(session, clusters)
+
+
 def cluster_records(session: Session, records: list[ExtractedRecord]) -> list[OpportunityCluster]:
     clusters: list[OpportunityCluster] = []
     for record in records:

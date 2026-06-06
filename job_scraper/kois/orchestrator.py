@@ -5,7 +5,7 @@ from collections.abc import Iterable
 
 from sqlalchemy.orm import Session
 
-from job_scraper.kois.clustering import cluster_records
+from job_scraper.kois.clustering import cluster_records, refresh_clusters
 from job_scraper.kois.config import get_settings
 from job_scraper.kois.digest import send_digest_items
 from job_scraper.kois.domain import RawIngestionItem
@@ -14,6 +14,7 @@ from job_scraper.kois.ingestion.imap_adapter import fetch_imap_items
 from job_scraper.kois.ingestion.scraper_adapter import jobs_to_raw_items
 from job_scraper.kois.repository import (
     create_extracted_record,
+    detach_record_cluster_sources,
     get_extracted_record_for_raw_source,
     list_clusters_with_unsent_digests,
     upsert_raw_source_item,
@@ -48,6 +49,7 @@ def run_kois_pipeline(
     )
     extractor = RecordExtractor(summarizer=summarizer)
     records = []
+    clusters_from_failed_extraction: list = []
     for raw_item in raw_items:
         existing_record = get_extracted_record_for_raw_source(session, raw_item.id)
         if existing_record and _record_matches_raw_content(raw_item, existing_record):
@@ -61,8 +63,15 @@ def run_kois_pipeline(
             logger.exception("Extraction failed for raw source %s", raw_item.id)
             raw_item.extraction_error = str(exc)
             session.flush()
+            if existing_record is not None:
+                clusters_from_failed_extraction.extend(
+                    detach_record_cluster_sources(session, existing_record)
+                )
 
     touched_clusters = cluster_records(session, records)
+    if clusters_from_failed_extraction:
+        refresh_clusters(session, clusters_from_failed_extraction)
+        touched_clusters = [*touched_clusters, *clusters_from_failed_extraction]
     pending_clusters = list_clusters_with_unsent_digests(session)
     clusters = list(
         {cluster.id: cluster for cluster in [*touched_clusters, *pending_clusters]}.values()

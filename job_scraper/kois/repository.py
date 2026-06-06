@@ -133,6 +133,25 @@ def attach_cluster_source(
     return source
 
 
+def detach_record_cluster_sources(
+    session: Session, record: ExtractedRecord
+) -> list[OpportunityCluster]:
+    links = list(
+        session.execute(
+            select(ClusterSource).where(ClusterSource.extracted_record_id == record.id)
+        ).scalars()
+    )
+    affected_clusters = []
+    for link in links:
+        affected_clusters.append(link.cluster)
+        session.delete(link)
+    if links:
+        session.flush()
+        for cluster in affected_clusters:
+            session.expire(cluster, ["sources"])
+    return affected_clusters
+
+
 def detach_superseded_cluster_sources(
     session: Session, record: ExtractedRecord
 ) -> list[OpportunityCluster]:
