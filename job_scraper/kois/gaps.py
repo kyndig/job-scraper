@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from job_scraper.kois.repository import upsert_agreement_gap
 from job_scraper.kois.schema import (
     AgreementGap,
     AgreementSignal,
+    ClusterSource,
     GapStatus,
     OpportunityCluster,
 )
@@ -28,7 +29,14 @@ def discover_missing_agreement_gaps(
 
     clusters_by_buyer: dict[str, list[OpportunityCluster]] = defaultdict(list)
     for cluster in session.execute(
-        select(OpportunityCluster).where(OpportunityCluster.customer.is_not(None))
+        select(OpportunityCluster).where(
+            OpportunityCluster.customer.is_not(None),
+            exists(
+                select(ClusterSource.id).where(
+                    ClusterSource.opportunity_cluster_id == OpportunityCluster.id
+                )
+            ),
+        )
     ).scalars():
         buyer_key = normalize_text(cluster.customer)
         if not buyer_key:

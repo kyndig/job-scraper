@@ -9,6 +9,7 @@ from job_scraper.kois.ingestion.procurement_adapter import fetch_procurement_ite
 from job_scraper.kois.config import KOISSettings
 from job_scraper.kois.repository import (
     create_extracted_record,
+    detach_record_cluster_sources,
     list_agreement_gaps,
     upsert_agreement_gap,
     upsert_agreement_signal,
@@ -309,3 +310,39 @@ def test_set_gap_status_preserves_existing_note_when_note_is_omitted():
     )
     assert updated.status == GapStatus.ACKNOWLEDGED
     assert updated.note == "Needs legal validation"
+
+
+def test_gap_discovery_ignores_clusters_without_attached_sources():
+    session = _session()
+    raw = upsert_raw_source_item(
+        session,
+        RawIngestionItem(
+            source_type="scraper",
+            source_name="broker-feed",
+            external_id="orphan-1",
+            raw_body='{"id":"orphan-1"}',
+        ),
+    )
+    record = create_extracted_record(
+        session,
+        {
+            "raw_source_item_id": raw.id,
+            "title": "Senior engineer",
+            "customer": "Oslo kommune",
+            "broker": "Broker",
+            "source_url": "https://example.com/orphan-1",
+            "deadline": None,
+            "description": "broker assignment",
+            "summary": None,
+            "extraction_confidence": 0.8,
+            "extracted_data": {"source_kind": "broker"},
+        },
+    )
+    clusters = cluster_records(session, [record])
+    assert len(clusters) == 1
+
+    detach_record_cluster_sources(session, record)
+    session.flush()
+
+    discovered = discover_missing_agreement_gaps(session, min_cluster_hits=1)
+    assert discovered == []
