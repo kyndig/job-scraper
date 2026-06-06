@@ -1,6 +1,9 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-from job_scraper.kois.agreement_signals import build_agreement_signal_payload
+from job_scraper.kois.agreement_signals import (
+    build_agreement_signal_payload,
+    sync_procurement_agreement_signal,
+)
 from job_scraper.kois.analytics import phase2_summary
 from job_scraper.kois.db import Base
 from job_scraper.kois.extraction import RecordExtractor
@@ -12,6 +15,7 @@ from job_scraper.kois.repository import (
     create_extracted_record,
     detach_record_cluster_sources,
     list_agreement_gaps,
+    list_agreement_signals,
     upsert_agreement_gap,
     upsert_agreement_signal,
     upsert_raw_source_item,
@@ -377,6 +381,76 @@ def test_infer_source_kind_does_not_promote_generic_tender_scrapers():
         metadata={"platform": "Talent Tender Board"},
     )
     assert source_kind == SourceKind.BROKER
+
+
+def test_sync_procurement_agreement_signal_revokes_stale_signal_and_reopens_gap():
+    session = _session()
+    raw = upsert_raw_source_item(
+        session,
+        RawIngestionItem(
+            source_type="procurement",
+            source_name="doffin",
+            external_id="notice-revoke-1",
+            raw_body='{"id":"notice-revoke-1"}',
+            metadata={
+                "notice_payload": {
+                    "title": "DPS backend",
+                    "buyer": "Oslo kommune",
+                    "agreement_type": "dps",
+                }
+            },
+        ),
+    )
+    record = create_extracted_record(
+        session,
+        RecordExtractor().extract(raw),
+    )
+    cluster_records(session, [record, record])
+    session.commit()
+
+    discover_missing_agreement_gaps(session, min_cluster_hits=1)
+    session.commit()
+    gaps = list_agreement_gaps(session)
+    assert len(gaps) == 1
+    assert gaps[0].status == GapStatus.OPEN
+
+    sync_procurement_agreement_signal(session, raw_item=raw, record=record)
+    session.commit()
+    assert len(list_agreement_signals(session)) == 1
+
+    discover_missing_agreement_gaps(session, min_cluster_hits=1)
+    session.commit()
+    gaps = list_agreement_gaps(session)
+    assert gaps[0].status == GapStatus.IGNORED
+    assert gaps[0].note == AGREEMENT_GAP_AUTO_CLOSE_NOTE
+
+    raw.metadata_json = {
+        "notice_payload": {
+            "title": "Backend consultant assignment",
+            "buyer": "Oslo kommune",
+            "agreement_type": "open_competition",
+        }
+    }
+    record.title = "Backend consultant assignment"
+    record.extracted_data = {
+        **(record.extracted_data or {}),
+        "agreement_type": "open_competition",
+    }
+    session.flush()
+
+    sync_procurement_agreement_signal(session, raw_item=raw, record=record)
+    session.commit()
+    assert list_agreement_signals(session) == []
+
+    discover_missing_agreement_gaps(session, min_cluster_hits=1)
+    session.commit()
+    reopened = list_agreement_gaps(session)[0]
+    assert reopened.status == GapStatus.OPEN
+    assert reopened.note is None
+
+    summary = phase2_summary(session)
+    assert summary["coverage"]["agreement_signal_count"] == 0
+    assert summary["coverage"]["open_gap_count"] == 1
 
 
 def test_agreement_signal_detects_compact_agreement_type_values():
