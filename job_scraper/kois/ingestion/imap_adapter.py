@@ -35,6 +35,20 @@ def _message_body(message: email.message.Message) -> str:
     return content.decode(message.get_content_charset() or "utf-8", errors="ignore")
 
 
+def _extract_rfc822_bytes(payload) -> bytes | None:
+    if not payload:
+        return None
+
+    for part in payload:
+        if isinstance(part, tuple) and len(part) >= 2:
+            body = part[1]
+            if isinstance(body, bytes):
+                return body
+        elif isinstance(part, bytes):
+            return part
+    return None
+
+
 def fetch_imap_items(settings: KOISSettings) -> list[RawIngestionItem]:
     if not settings.imap_host or not settings.imap_username or not settings.imap_password:
         return []
@@ -53,7 +67,9 @@ def fetch_imap_items(settings: KOISSettings) -> list[RawIngestionItem]:
             if fetch_status != "OK" or not payload:
                 continue
 
-            raw_email = payload[0][1]
+            raw_email = _extract_rfc822_bytes(payload)
+            if raw_email is None:
+                continue
             message = email.message_from_bytes(raw_email)
             message_id = message.get("Message-ID", uid.decode("utf-8"))
             body = _message_body(message)
