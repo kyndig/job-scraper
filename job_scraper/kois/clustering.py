@@ -26,6 +26,7 @@ SOURCE_PRIORITY = {
     "direct": 80,
     "broker": 70,
     "email_forwarded": 60,
+    "forwarded": 50,
     "manual": 40,
     "unknown": 10,
 }
@@ -52,6 +53,8 @@ def _source_priority_key(record: ExtractedRecord) -> str:
         return "procurement_platform"
     if source_type == "email" or "@" in broker:
         return "email_forwarded"
+    if "forwarded" in fingerprint or "forward" in fingerprint:
+        return "forwarded"
     if "manual" in fingerprint:
         return "manual"
     if source_type == "scraper" or "broker" in fingerprint:

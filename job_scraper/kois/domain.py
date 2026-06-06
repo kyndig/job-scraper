@@ -23,6 +23,7 @@ class SourceKind(str, Enum):
     DIRECT = "direct"
     BROKER = "broker"
     EMAIL_FORWARDED = "email_forwarded"
+    FORWARDED = "forwarded"
     MANUAL = "manual"
     UNKNOWN = "unknown"
 
@@ -53,6 +54,8 @@ def infer_source_kind(
         return SourceKind.PROCUREMENT_PLATFORM
     if "procurement" in fingerprint or "anskaff" in fingerprint:
         return SourceKind.PROCUREMENT_PLATFORM
+    if "forwarded" in fingerprint or "forward" in fingerprint:
+        return SourceKind.FORWARDED
     if source_type_value in {"scraper", "broker"}:
         return SourceKind.BROKER
     if "direct" in fingerprint:

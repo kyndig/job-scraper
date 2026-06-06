@@ -302,6 +302,74 @@ def test_agreement_signal_detection_ignores_non_procurement_framework_mentions()
     assert payload is None
 
 
+def test_source_kind_priority_prefers_email_over_forward_like_scraper():
+    session = _session()
+    raw_email = upsert_raw_source_item(
+        session,
+        RawIngestionItem(
+            source_type="email",
+            source_name="oppdrag@kynd.no",
+            external_id="mail-forward-1",
+            raw_body="email-content",
+        ),
+    )
+    raw_forward_scraper = upsert_raw_source_item(
+        session,
+        RawIngestionItem(
+            source_type="scraper",
+            source_name="forward-talent",
+            external_id="forward-1",
+            raw_body="forwarded-summary",
+        ),
+    )
+    email_record = create_extracted_record(
+        session,
+        {
+            "raw_source_item_id": raw_email.id,
+            "title": "Backend engineer",
+            "customer": "Kynd",
+            "broker": "sender@example.com",
+            "source_url": "https://example.com/shared",
+            "deadline": "2026-07-01",
+            "description": "email body",
+            "summary": None,
+            "extraction_confidence": 0.8,
+            "extracted_data": {"source_kind": "email_forwarded"},
+        },
+    )
+    forward_scraper_record = create_extracted_record(
+        session,
+        {
+            "raw_source_item_id": raw_forward_scraper.id,
+            "title": "Backend engineer",
+            "customer": "Kynd",
+            "broker": "Forward Talent",
+            "source_url": "https://forward.example.com/shared",
+            "deadline": "2026-07-01",
+            "description": "forwarded broker summary",
+            "summary": None,
+            "extraction_confidence": 0.9,
+            "extracted_data": {
+                "source_kind": "forwarded",
+                "source_type": "scraper",
+                "platform": "Forward Talent",
+            },
+        },
+    )
+    clusters = cluster_records(session, [forward_scraper_record, email_record])
+    session.commit()
+    assert clusters[-1].primary_source_record_id == email_record.id
+
+
+def test_infer_source_kind_classifies_forward_like_scrapers_below_broker():
+    source_kind = infer_source_kind(
+        source_type="scraper",
+        source_name="forward-talent",
+        metadata={"platform": "Forward Talent"},
+    )
+    assert source_kind == SourceKind.FORWARDED
+
+
 def test_infer_source_kind_does_not_promote_generic_tender_scrapers():
     source_kind = infer_source_kind(
         source_type="scraper",
