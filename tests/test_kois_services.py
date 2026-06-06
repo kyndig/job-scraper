@@ -530,6 +530,71 @@ def test_orchestrator_retries_pending_digests_not_touched_this_run(monkeypatch):
     assert digest_item.sent_at is not None
 
 
+def test_orchestrator_detaches_stale_cluster_source_when_reextraction_fails(monkeypatch):
+    from job_scraper.kois.orchestrator import run_kois_pipeline
+
+    session = _session()
+    job = Job(
+        job_overview=JobOverview(
+            title="Data Engineer",
+            company="Kynd",
+            delivery_date="2026-06-30",
+            job_uri="https://example.com/jobs/1",
+        ),
+        description="Original description",
+        platform="Mercell",
+    )
+    monkeypatch.setattr(
+        "job_scraper.kois.orchestrator.fetch_imap_items",
+        lambda settings: [],
+    )
+    monkeypatch.setattr(
+        "job_scraper.kois.orchestrator.get_settings",
+        lambda: type(
+            "Settings",
+            (),
+            {
+                "gemini_api_key": None,
+                "run_live_slack": False,
+                "slack_channel": "job-posting",
+            },
+        )(),
+    )
+
+    run_kois_pipeline(session=session, scraped_jobs=[job])
+
+    class BrokenExtractor:
+        def extract(self, raw_source):
+            raise ValueError("extraction failed")
+
+    monkeypatch.setattr(
+        "job_scraper.kois.orchestrator.RecordExtractor",
+        lambda summarizer=None: BrokenExtractor(),
+    )
+
+    updated_job = Job(
+        job_overview=JobOverview(
+            title="Data Engineer",
+            company="Kynd",
+            delivery_date="2026-07-15",
+            job_uri="https://example.com/jobs/1",
+        ),
+        description="Broken body",
+        platform="Mercell",
+    )
+    run_kois_pipeline(session=session, scraped_jobs=[updated_job])
+
+    raw_item = session.execute(select(RawSourceItem)).scalar_one()
+    cluster = session.execute(select(OpportunityCluster)).scalar_one()
+    cluster_sources = session.execute(select(ClusterSource)).scalars().all()
+    extracted_rows = session.execute(select(ExtractedRecord)).scalars().all()
+
+    assert raw_item.extraction_error == "extraction failed"
+    assert len(extracted_rows) == 1
+    assert cluster_sources == []
+    assert cluster.primary_source_record_id is None
+
+
 def test_scraper_fallback_external_id_avoids_title_collisions_without_uri():
     from job_scraper.kois.ingestion.scraper_adapter import jobs_to_raw_items
 
