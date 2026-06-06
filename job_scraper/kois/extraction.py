@@ -41,7 +41,11 @@ class RecordExtractor:
             "description": body,
             "summary": summary,
             "extraction_confidence": 0.65,
-            "extracted_data": {"source_type": "email", "metadata": metadata},
+            "extracted_data": {
+                "source_type": "email",
+                "metadata": metadata,
+                "raw_content_hash": raw_source.content_hash,
+            },
         }
 
     def _extract_scraper(self, raw_source: RawSourceItem) -> dict:
@@ -64,6 +68,7 @@ class RecordExtractor:
                 "source_type": "scraper",
                 "platform": job.platform,
                 "host": urlparse(job.job_overview.job_uri or "").hostname,
+                "raw_content_hash": raw_source.content_hash,
             },
         }
 

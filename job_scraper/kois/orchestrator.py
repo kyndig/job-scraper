@@ -24,6 +24,11 @@ from job_scraper.summarizer import JobDescriptionSummarizer
 logger = logging.getLogger(__name__)
 
 
+def _record_matches_raw_content(raw_item, record) -> bool:
+    extracted_data = record.extracted_data or {}
+    return extracted_data.get("raw_content_hash") == raw_item.content_hash
+
+
 def run_kois_pipeline(
     session: Session,
     scraped_jobs: Iterable[Job],
@@ -44,7 +49,7 @@ def run_kois_pipeline(
     records = []
     for raw_item in raw_items:
         existing_record = get_extracted_record_for_raw_source(session, raw_item.id)
-        if existing_record:
+        if existing_record and _record_matches_raw_content(raw_item, existing_record):
             records.append(existing_record)
             continue
         try:
