@@ -1,35 +1,62 @@
 from __future__ import annotations
 
+import re
+
 from job_scraper.kois.schema import ExtractedRecord, RawSourceItem
 from job_scraper.kois.utils import normalize_text
 
 
-AGREEMENT_KEYWORDS = ("dps", "frame", "framework", "agreement", "rammeavtale")
+AGREEMENT_PHRASES = (
+    "dps",
+    "dynamic purchasing system",
+    "frame agreement",
+    "framework agreement",
+    "rammeavtale",
+    "ramme avtale",
+)
 
 
-def _looks_like_agreement(metadata: dict, record: ExtractedRecord) -> bool:
-    agreement_type = normalize_text(metadata.get("agreement_type"))
-    notice_type = normalize_text(metadata.get("notice_type"))
-    haystack = " ".join(
-        value
-        for value in (
-            agreement_type,
-            notice_type,
-            normalize_text(record.title),
-            normalize_text(record.description),
-        )
-        if value
+def _contains_agreement_phrase(text: str | None) -> bool:
+    normalized = normalize_text(text)
+    if not normalized:
+        return False
+    return any(
+        re.search(rf"\b{re.escape(keyword)}\b", normalized) for keyword in AGREEMENT_PHRASES
     )
-    return any(keyword in haystack for keyword in AGREEMENT_KEYWORDS)
+
+
+def _looks_like_agreement(
+    metadata: dict, notice_payload: dict, record: ExtractedRecord
+) -> bool:
+    agreement_type = normalize_text(
+        notice_payload.get("agreement_type")
+        or metadata.get("agreement_type")
+        or record.extracted_data.get("agreement_type")
+    )
+    notice_type = normalize_text(
+        notice_payload.get("notice_type")
+        or metadata.get("notice_type")
+        or record.extracted_data.get("notice_type")
+    )
+    title = normalize_text(notice_payload.get("title") or record.title)
+    return any(
+        (
+            _contains_agreement_phrase(agreement_type),
+            _contains_agreement_phrase(notice_type),
+            _contains_agreement_phrase(title),
+        )
+    )
 
 
 def build_agreement_signal_payload(
     raw_item: RawSourceItem, record: ExtractedRecord
 ) -> dict | None:
-    metadata = raw_item.metadata_json or {}
-    if not _looks_like_agreement(metadata, record):
+    if raw_item.source_type != "procurement":
         return None
+    metadata = raw_item.metadata_json or {}
     notice_payload = metadata.get("notice_payload") or {}
+    if not _looks_like_agreement(metadata, notice_payload, record):
+        return None
     return {
         "raw_source_item_id": raw_item.id,
         "source_name": raw_item.source_name,
