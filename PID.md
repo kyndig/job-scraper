@@ -50,6 +50,7 @@ KOIS does not own:
 - `PrimarySource`: the preferred source for display and decisioning at a point in time.
 - `SourceComparison`: differences, overlaps, and additions across source records in a cluster.
 - `AgreementSignal`: DPS or frame-agreement information that may not be assignment-related.
+- `AgreementGap`: persisted potential coverage gap where repeated buyer demand appears without matching agreement signals.
 - `ReviewState`: `auto_accepted`, `needs_review`, `manually_merged`, `manually_split`, `ignored`, or `watch_only`.
 - `DigestItem`: generated output for Slack or reports, backed by stored evidence.
 - `ExternalFitAssessment`: later KBS-provided fit assessment for consultants, CVs, references, or bid material.
@@ -81,6 +82,8 @@ Implementation status: in progress. Current implementation uses Postgres-backed 
 Add Doffin and procurement monitoring, agreement-signal handling, buyer and broker analytics, and discovery of DPS or frame agreements Kynd may not have found or applied for.
 
 Success metric: KOIS identifies market patterns and agreement coverage gaps, not only new assignments.
+
+Implementation status: in progress. Current implementation adds procurement feed adapters, canonical source taxonomy for clustering priority, persisted agreement signals and agreement gaps, analytics summary services, and API endpoints for market intelligence and gap triage.
 
 ### Phase 3: Sales Opportunity Filtering
 
