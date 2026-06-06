@@ -176,14 +176,31 @@ def create_digest_item(
     status: ReviewStatus,
     payload: dict,
 ) -> DigestItem:
-    existing = session.execute(
+    existing_unsent = session.execute(
+        select(DigestItem)
+        .where(
+            DigestItem.opportunity_cluster_id == cluster.id,
+            DigestItem.sent_at.is_(None),
+        )
+        .order_by(DigestItem.id.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if existing_unsent:
+        existing_unsent.review_status = status
+        existing_unsent.payload_json = payload
+        session.flush()
+        return existing_unsent
+
+    existing_sent = session.execute(
         select(DigestItem).where(
             DigestItem.opportunity_cluster_id == cluster.id,
-            DigestItem.review_status == status,
+            DigestItem.sent_at.is_not(None),
         )
+        .order_by(DigestItem.sent_at.desc(), DigestItem.id.desc())
+        .limit(1)
     ).scalar_one_or_none()
-    if existing:
-        return existing
+    if existing_sent:
+        return existing_sent
 
     item = DigestItem(
         opportunity_cluster_id=cluster.id,
