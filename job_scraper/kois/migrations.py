@@ -8,6 +8,7 @@ from job_scraper.kois import schema  # noqa: F401
 
 INIT_MIGRATION_ID = "20260605_kois_phase1_init"
 DROP_CONTENT_HASH_UNIQUE_MIGRATION_ID = "20260606_drop_raw_source_content_hash_unique"
+PHASE2_INTELLIGENCE_MIGRATION_ID = "20260606_phase2_agreements_and_gaps"
 
 
 def _ensure_migrations_table(connection) -> None:
@@ -54,9 +55,15 @@ def _drop_content_hash_unique(connection) -> None:
     )
 
 
+def _add_phase2_tables(connection) -> None:
+    schema.AgreementSignal.__table__.create(bind=connection, checkfirst=True)
+    schema.AgreementGap.__table__.create(bind=connection, checkfirst=True)
+
+
 MIGRATIONS: list[tuple[str, Callable]] = [
     (INIT_MIGRATION_ID, _run_init),
     (DROP_CONTENT_HASH_UNIQUE_MIGRATION_ID, _drop_content_hash_unique),
+    (PHASE2_INTELLIGENCE_MIGRATION_ID, _add_phase2_tables),
 ]
 
 

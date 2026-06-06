@@ -26,6 +26,12 @@ class KOISSettings(BaseSettings):
     imap_since_uid: int = 1
     imap_source_name: str = "oppdrag@kynd.no"
 
+    doffin_feed_url: str | None = None
+    doffin_feed_json: str | None = None
+    procurement_feed_urls_by_source: dict[str, str] = Field(default_factory=dict)
+    procurement_feed_json_by_source: dict[str, str] = Field(default_factory=dict)
+    agreement_gap_min_cluster_hits: int = 2
+
     run_live_slack: bool = False
 
 

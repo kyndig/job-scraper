@@ -7,9 +7,12 @@ from sqlalchemy.orm import Session
 
 from job_scraper.kois.domain import RawIngestionItem
 from job_scraper.kois.schema import (
+    AgreementGap,
+    AgreementSignal,
     ClusterSource,
     DigestItem,
     ExtractedRecord,
+    GapStatus,
     OpportunityCluster,
     RawSourceItem,
     ReviewState,
@@ -293,3 +296,74 @@ def list_clusters_with_unsent_digests(session: Session) -> list[OpportunityClust
             .distinct()
         ).scalars()
     )
+
+
+def upsert_agreement_signal(session: Session, payload: dict) -> AgreementSignal:
+    existing = session.execute(
+        select(AgreementSignal).where(
+            AgreementSignal.source_name == payload["source_name"],
+            AgreementSignal.external_id == payload["external_id"],
+        )
+    ).scalar_one_or_none()
+    if existing:
+        existing.raw_source_item_id = payload["raw_source_item_id"]
+        existing.title = payload.get("title")
+        existing.buyer_name = payload.get("buyer_name")
+        existing.agreement_type = payload.get("agreement_type")
+        existing.category = payload.get("category")
+        existing.status = payload.get("status")
+        existing.source_url = payload.get("source_url")
+        existing.published_at = payload.get("published_at")
+        existing.deadline = payload.get("deadline")
+        existing.signal_confidence = payload.get("signal_confidence", 0.0)
+        existing.metadata_json = payload.get("metadata_json", {})
+        session.flush()
+        return existing
+
+    created = AgreementSignal(**payload)
+    session.add(created)
+    session.flush()
+    return created
+
+
+def list_agreement_signals(
+    session: Session,
+    buyer_name: str | None = None,
+    agreement_type: str | None = None,
+    limit: int = 50,
+) -> list[AgreementSignal]:
+    query = select(AgreementSignal).order_by(AgreementSignal.updated_at.desc())
+    if buyer_name:
+        query = query.where(AgreementSignal.buyer_name.ilike(f"%{buyer_name}%"))
+    if agreement_type:
+        query = query.where(AgreementSignal.agreement_type == agreement_type)
+    return list(session.execute(query.limit(limit)).scalars())
+
+
+def upsert_agreement_gap(session: Session, payload: dict) -> AgreementGap:
+    existing = session.execute(
+        select(AgreementGap).where(AgreementGap.gap_key == payload["gap_key"])
+    ).scalar_one_or_none()
+    if existing:
+        existing.buyer_name = payload["buyer_name"]
+        existing.confidence = payload["confidence"]
+        existing.rationale = payload["rationale"]
+        existing.evidence_json = payload["evidence_json"]
+        if existing.status in {GapStatus.OPEN, GapStatus.ACKNOWLEDGED}:
+            existing.status = payload.get("status", GapStatus.OPEN)
+        session.flush()
+        return existing
+
+    created = AgreementGap(**payload)
+    session.add(created)
+    session.flush()
+    return created
+
+
+def list_agreement_gaps(
+    session: Session, status: GapStatus | None = None
+) -> list[AgreementGap]:
+    query = select(AgreementGap).order_by(AgreementGap.confidence.desc(), AgreementGap.id.desc())
+    if status:
+        query = query.where(AgreementGap.status == status)
+    return list(session.execute(query).scalars())

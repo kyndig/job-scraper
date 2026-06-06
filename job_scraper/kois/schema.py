@@ -19,6 +19,13 @@ class ReviewStatus(str, enum.Enum):
     WATCH_ONLY = "watch_only"
 
 
+class GapStatus(str, enum.Enum):
+    OPEN = "open"
+    ACKNOWLEDGED = "acknowledged"
+    WATCH_ONLY = "watch_only"
+    IGNORED = "ignored"
+
+
 class RawSourceItem(Base):
     __tablename__ = "raw_source_items"
     __table_args__ = (
@@ -188,3 +195,63 @@ class DigestItem(Base):
     )
 
     cluster: Mapped[OpportunityCluster] = relationship(back_populates="digest_items")
+
+
+class AgreementSignal(Base):
+    __tablename__ = "agreement_signals"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_name",
+            "external_id",
+            name="uq_agreement_signal_source_external",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    raw_source_item_id: Mapped[int] = mapped_column(
+        ForeignKey("raw_source_items.id"), index=True
+    )
+    source_name: Mapped[str] = mapped_column(String(128), index=True)
+    external_id: Mapped[str] = mapped_column(String(512), index=True)
+    title: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    buyer_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True, index=True)
+    agreement_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    category: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    status: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    source_url: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    published_at: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    deadline: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    signal_confidence: Mapped[float] = mapped_column(default=0.0)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    raw_source: Mapped[RawSourceItem] = relationship()
+
+
+class AgreementGap(Base):
+    __tablename__ = "agreement_gaps"
+    __table_args__ = (
+        UniqueConstraint("gap_key", name="uq_agreement_gap_key"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    gap_key: Mapped[str] = mapped_column(String(256), index=True)
+    buyer_name: Mapped[str] = mapped_column(String(256), index=True)
+    status: Mapped[GapStatus] = mapped_column(
+        Enum(GapStatus), default=GapStatus.OPEN, index=True
+    )
+    confidence: Mapped[float] = mapped_column(default=0.0)
+    rationale: Mapped[str] = mapped_column(Text, default="")
+    evidence_json: Mapped[dict] = mapped_column("evidence", JSON, default=dict)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+    )

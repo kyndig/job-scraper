@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from urllib.parse import urlparse
 
+from job_scraper.kois.domain import infer_source_kind
 from job_scraper.models import Job
 from job_scraper.kois.schema import RawSourceItem
 from job_scraper.kois.utils import normalize_text, normalize_url
@@ -22,6 +23,11 @@ class RecordExtractor:
         body = raw_source.raw_body
         metadata = raw_source.metadata_json or {}
         subject = metadata.get("subject")
+        source_kind = infer_source_kind(
+            raw_source.source_type,
+            raw_source.source_name,
+            metadata,
+        )
 
         title_match = TITLE_PATTERN.search(subject or "") or TITLE_PATTERN.search(body)
         deadline_match = DEADLINE_PATTERN.search(body)
@@ -44,6 +50,7 @@ class RecordExtractor:
             "extracted_data": {
                 "source_type": "email",
                 "metadata": metadata,
+                "source_kind": source_kind.value,
                 "raw_content_hash": raw_source.content_hash,
             },
         }
@@ -54,6 +61,11 @@ class RecordExtractor:
         summary = job.description_summarised
         if not summary and self.summarizer:
             summary = self.summarizer.summarize(description)
+        source_kind = infer_source_kind(
+            raw_source.source_type,
+            raw_source.source_name,
+            raw_source.metadata_json,
+        )
         return {
             "raw_source_item_id": raw_source.id,
             "title": job.job_overview.title,
@@ -68,6 +80,38 @@ class RecordExtractor:
                 "source_type": "scraper",
                 "platform": job.platform,
                 "host": urlparse(job.job_overview.job_uri or "").hostname,
+                "source_kind": source_kind.value,
+                "raw_content_hash": raw_source.content_hash,
+            },
+        }
+
+    def _extract_procurement(self, raw_source: RawSourceItem) -> dict:
+        metadata = raw_source.metadata_json or {}
+        payload = metadata.get("notice_payload") or {}
+        source_url = payload.get("url") or payload.get("source_url")
+        source_kind = infer_source_kind(
+            raw_source.source_type,
+            raw_source.source_name,
+            metadata,
+        )
+
+        return {
+            "raw_source_item_id": raw_source.id,
+            "title": payload.get("title") or metadata.get("title"),
+            "customer": payload.get("buyer") or payload.get("customer"),
+            "broker": raw_source.source_name,
+            "source_url": source_url,
+            "deadline": payload.get("deadline"),
+            "description": payload.get("description") or raw_source.raw_body,
+            "summary": payload.get("summary"),
+            "extraction_confidence": 0.85,
+            "extracted_data": {
+                "source_type": "procurement",
+                "source_kind": source_kind.value,
+                "agreement_type": payload.get("agreement_type"),
+                "notice_type": payload.get("notice_type"),
+                "category": payload.get("category"),
+                "host": urlparse(source_url or "").hostname,
                 "raw_content_hash": raw_source.content_hash,
             },
         }
@@ -75,6 +119,8 @@ class RecordExtractor:
     def extract(self, raw_source: RawSourceItem) -> dict:
         if raw_source.source_type == "email":
             return self._extract_email(raw_source)
+        if raw_source.source_type == "procurement":
+            return self._extract_procurement(raw_source)
 
         return self._extract_scraper(raw_source)
 

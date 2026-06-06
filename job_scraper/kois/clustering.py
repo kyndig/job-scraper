@@ -21,12 +21,11 @@ from job_scraper.kois.utils import normalize_text, normalize_url
 
 
 SOURCE_PRIORITY = {
-    "doffin": 100,
-    "procurement": 90,
+    "public_tender": 100,
+    "procurement_platform": 90,
     "direct": 80,
     "broker": 70,
-    "email": 60,
-    "forwarded": 50,
+    "email_forwarded": 60,
     "manual": 40,
     "unknown": 10,
 }
@@ -34,6 +33,10 @@ SOURCE_PRIORITY = {
 
 def _source_priority_key(record: ExtractedRecord) -> str:
     extracted_data = record.extracted_data or {}
+    canonical = normalize_text(extracted_data.get("source_kind"))
+    if canonical in SOURCE_PRIORITY:
+        return canonical
+
     source_type = normalize_text(extracted_data.get("source_type"))
     platform = normalize_text(extracted_data.get("platform"))
     host = normalize_text(extracted_data.get("host"))
@@ -44,13 +47,11 @@ def _source_priority_key(record: ExtractedRecord) -> str:
     )
 
     if "doffin" in fingerprint:
-        return "doffin"
+        return "public_tender"
     if "procurement" in fingerprint:
-        return "procurement"
+        return "procurement_platform"
     if source_type == "email" or "@" in broker:
-        return "email"
-    if "forwarded" in fingerprint or "forward" in fingerprint:
-        return "forwarded"
+        return "email_forwarded"
     if "manual" in fingerprint:
         return "manual"
     if source_type == "scraper" or "broker" in fingerprint:
