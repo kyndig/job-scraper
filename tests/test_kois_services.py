@@ -454,3 +454,31 @@ def test_orchestrator_retries_pending_digests_not_touched_this_run(monkeypatch):
     assert digest_item.sent_at is not None
 
 
+def test_scraper_fallback_external_id_avoids_title_collisions_without_uri():
+    from job_scraper.kois.ingestion.scraper_adapter import jobs_to_raw_items
+
+    first_job = Job(
+        job_overview=JobOverview(
+            title="Backend Developer",
+            company="Kynd A",
+            delivery_date="2026-06-30",
+            job_uri=None,
+        ),
+        description="First listing",
+        platform="Mercell",
+    )
+    second_job = Job(
+        job_overview=JobOverview(
+            title="Backend Developer",
+            company="Kynd B",
+            delivery_date="2026-07-30",
+            job_uri=None,
+        ),
+        description="Second listing",
+        platform="Mercell",
+    )
+
+    raw_items = jobs_to_raw_items([first_job, second_job])
+    assert raw_items[0].external_id != raw_items[1].external_id
+
+
