@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from job_scraper.kois.analytics import phase2_summary
 from job_scraper.kois.config import get_settings
 from job_scraper.kois.db import get_db_session
-from job_scraper.kois.filtering import OpportunityFilterPolicy
+from job_scraper.kois.filtering import ClusterFilteringResult, OpportunityFilterPolicy
 from job_scraper.kois.gaps import discover_missing_agreement_gaps, set_gap_status
 from job_scraper.kois.repository import list_agreement_gaps, list_agreement_signals
 from job_scraper.kois.review import ReviewService
@@ -113,24 +113,26 @@ def relevant_opportunities(
     query = select(OpportunityCluster)
     if status:
         query = query.where(OpportunityCluster.review_status == status)
-    if role:
-        query = query.where(OpportunityCluster.role_category == role)
-    clusters = list(
-        session.execute(
-            query.order_by(
-                OpportunityCluster.relevance_score.desc(),
-                OpportunityCluster.confidence.desc(),
-                OpportunityCluster.id.desc(),
-            ).limit(limit)
-        ).scalars()
-    )
-    response = []
+    clusters = list(session.execute(query).scalars())
+    evaluated_matches: list[tuple[OpportunityCluster, ClusterFilteringResult]] = []
     for cluster in clusters:
         evaluation = policy.evaluate_cluster(cluster)
-        if evaluation.relevance_score < threshold or not policy.should_include_digest(
-            cluster, evaluated_relevance=evaluation.relevance_score
+        if role and evaluation.role_category != role:
+            continue
+        if not policy.should_include_digest(
+            cluster,
+            evaluated_relevance=evaluation.relevance_score,
+            min_relevance_override=threshold,
         ):
             continue
+        evaluated_matches.append((cluster, evaluation))
+
+    evaluated_matches.sort(
+        key=lambda item: (item[1].relevance_score, item[0].confidence, item[0].id),
+        reverse=True,
+    )
+    response = []
+    for cluster, evaluation in evaluated_matches[:limit]:
         response.append(
             {
                 "id": cluster.id,
