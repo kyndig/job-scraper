@@ -81,6 +81,7 @@ def _cadence_blocked(session: Session, cadence_minutes: int) -> bool:
         return False
     latest_sent_at = session.execute(
         select(DigestItem.sent_at)
+        .where(DigestItem.sent_at.is_not(None))
         .order_by(DigestItem.sent_at.desc())
         .limit(1)
     ).scalar_one_or_none()
