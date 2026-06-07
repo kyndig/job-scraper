@@ -60,12 +60,16 @@ def test_digest_item_not_resent_when_already_sent():
     cluster.primary_source_record_id = record.id
     session.commit()
 
-    slack = SlackPoster(optional=True)
+    class SuccessfulSlack(SlackPoster):
+        def post_digest(self, payload, channel="job-posting"):
+            return {"ts": "123.45"}
+
+    slack = SuccessfulSlack(optional=True)
     first = send_digest_items(
         session=session,
         clusters=[cluster],
         slack=slack,
-        live_posting=False,
+        live_posting=True,
         channel="job-posting",
     )
     session.commit()
@@ -73,7 +77,7 @@ def test_digest_item_not_resent_when_already_sent():
         session=session,
         clusters=[cluster],
         slack=slack,
-        live_posting=False,
+        live_posting=True,
         channel="job-posting",
     )
     session.commit()
@@ -358,3 +362,73 @@ def test_digest_cadence_ignores_unsent_rows_for_latest_sent_lookup(monkeypatch):
 
     assert sent == []
     assert candidate_cluster.digest_items[0].sent_at is None
+
+
+def test_dry_run_does_not_block_later_live_send_with_cadence():
+    session = _session()
+    raw = upsert_raw_source_item(
+        session,
+        RawIngestionItem(
+            source_type="scraper",
+            source_name="mercell",
+            external_id="id-dry-run-cadence",
+            raw_body="raw-data",
+        ),
+    )
+    record = create_extracted_record(
+        session,
+        {
+            "raw_source_item_id": raw.id,
+            "title": "Assignment",
+            "customer": "Kynd",
+            "broker": "mercell",
+            "source_url": "https://example.com/dry-run-cadence",
+            "deadline": "2026-06-30",
+            "description": "desc",
+            "summary": "sum",
+            "extracted_data": {},
+            "extraction_confidence": 0.95,
+        },
+    )
+    cluster = create_or_update_cluster(
+        session=session,
+        cluster_key="https://example.com/dry-run-cadence",
+        title="Assignment",
+        customer="Kynd",
+        confidence=0.95,
+        review_status=ReviewStatus.AUTO_ACCEPTED,
+    )
+    attach_cluster_source(session, cluster, record, 0.95, "url")
+    cluster.primary_source_record_id = record.id
+    cluster.relevance_score = 0.9
+    session.commit()
+
+    dry_run = send_digest_items(
+        session=session,
+        clusters=[cluster],
+        slack=SlackPoster(optional=True),
+        live_posting=False,
+        channel="job-posting",
+        settings=KOISSettings(digest_cadence_minutes=120),
+    )
+    session.commit()
+
+    assert len(dry_run) == 1
+    assert cluster.digest_items[0].sent_at is None
+
+    class SuccessfulSlack(SlackPoster):
+        def post_digest(self, payload, channel="job-posting"):
+            return {"ts": "456.78"}
+
+    live_run = send_digest_items(
+        session=session,
+        clusters=[cluster],
+        slack=SuccessfulSlack(optional=True),
+        live_posting=True,
+        channel="job-posting",
+        settings=KOISSettings(digest_cadence_minutes=120),
+    )
+    session.commit()
+
+    assert len(live_run) == 1
+    assert cluster.digest_items[0].sent_at is not None
