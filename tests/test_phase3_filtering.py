@@ -205,3 +205,11 @@ def test_invalid_availability_profile_json_raises():
     settings = KOISSettings(availability_profile_json="not-json")
     with pytest.raises(ValueError):
         _ = settings.availability_profile
+
+
+def test_availability_profile_rejects_boolean_capacity_values():
+    settings = KOISSettings(availability_profile_json='{"data_engineering": true}')
+    with pytest.raises(
+        ValueError, match="must be an integer capacity value"
+    ):
+        _ = settings.availability_profile
