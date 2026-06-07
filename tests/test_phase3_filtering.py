@@ -213,3 +213,28 @@ def test_availability_profile_rejects_boolean_capacity_values():
         ValueError, match="must be an integer capacity value"
     ):
         _ = settings.availability_profile
+
+
+def test_list_clusters_filters_role_and_relevance_on_fresh_evaluation(monkeypatch):
+    session = _session()
+    cluster = _make_cluster(session, title="Senior Data Engineer")
+    cluster.role_category = "backend"
+    cluster.relevance_score = 0.0
+    session.commit()
+
+    settings = KOISSettings(
+        availability_profile_json='{"data_engineering": 2}',
+        digest_min_relevance_score=0.45,
+    )
+    monkeypatch.setattr(review_api, "get_settings", lambda: settings)
+
+    response = review_api.list_clusters(
+        session=session,
+        role="data_engineering",
+        min_relevance_score=0.5,
+    )
+
+    assert len(response) == 1
+    assert response[0]["id"] == cluster.id
+    assert response[0]["role_category"] == "data_engineering"
+    assert response[0]["relevance_score"] >= 0.5

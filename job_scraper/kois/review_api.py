@@ -42,13 +42,11 @@ def list_clusters(
     q: str | None = None,
     session: Session = Depends(get_db_session),
 ):
+    settings = get_settings()
+    policy = OpportunityFilterPolicy(settings)
     query = select(OpportunityCluster)
     if status:
         query = query.where(OpportunityCluster.review_status == status)
-    if role:
-        query = query.where(OpportunityCluster.role_category == role)
-    if min_relevance_score is not None:
-        query = query.where(OpportunityCluster.relevance_score >= min_relevance_score)
     if q:
         query = query.where(
             or_(
@@ -58,22 +56,32 @@ def list_clusters(
             )
         )
     clusters = list(session.execute(query).scalars())
-    return [
-        {
-            "id": cluster.id,
-            "cluster_key": cluster.cluster_key,
-            "title": cluster.title,
-            "customer": cluster.customer,
-            "review_status": cluster.review_status.value,
-            "confidence": cluster.confidence,
-            "source_count": len(cluster.sources),
-            "role_category": cluster.role_category,
-            "role_tags": cluster.role_tags_json,
-            "relevance_score": cluster.relevance_score,
-            "relevance_rationale": cluster.relevance_rationale,
-        }
-        for cluster in clusters
-    ]
+    response = []
+    for cluster in clusters:
+        evaluation = policy.evaluate_cluster(cluster)
+        if role and evaluation.role_category != role:
+            continue
+        if (
+            min_relevance_score is not None
+            and evaluation.relevance_score < min_relevance_score
+        ):
+            continue
+        response.append(
+            {
+                "id": cluster.id,
+                "cluster_key": cluster.cluster_key,
+                "title": cluster.title,
+                "customer": cluster.customer,
+                "review_status": cluster.review_status.value,
+                "confidence": cluster.confidence,
+                "source_count": len(cluster.sources),
+                "role_category": evaluation.role_category,
+                "role_tags": evaluation.role_tags,
+                "relevance_score": evaluation.relevance_score,
+                "relevance_rationale": evaluation.relevance_rationale,
+            }
+        )
+    return response
 
 
 @app.get("/review-queue")
