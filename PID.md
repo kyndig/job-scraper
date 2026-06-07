@@ -94,7 +94,7 @@ Add lightweight role classification, availability-aware digest modes, source/rel
 
 Success metric: Slack highlights fewer but better items while the archive remains complete.
 
-Implementation status: in progress. Current implementation adds deterministic role classification, availability-profile-aware relevance scoring, configurable digest thresholds/cadence, and relevant-opportunity API filtering while preserving archive recall.
+Implementation status: completed for now. Current implementation adds deterministic role classification, availability-profile-aware relevance scoring, configurable digest thresholds/cadence, and relevant-opportunity API filtering while preserving archive recall; ongoing work is tuning role taxonomy and capacity-profile defaults from operator feedback.
 
 ### Phase 4: KBS Integration
 
