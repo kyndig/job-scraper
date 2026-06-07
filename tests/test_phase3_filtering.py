@@ -118,6 +118,66 @@ def test_relevant_opportunities_endpoint_uses_shared_policy(monkeypatch):
     assert irrelevant_cluster.id not in returned_ids
 
 
+def test_relevant_opportunities_filters_role_on_fresh_evaluation(monkeypatch):
+    session = _session()
+    cluster = _make_cluster(session, title="Senior Data Engineer")
+    cluster.role_category = "backend"
+    session.commit()
+
+    settings = KOISSettings(
+        availability_profile_json='{"data_engineering": 2}',
+        digest_min_relevance_score=0.45,
+    )
+    monkeypatch.setattr(review_api, "get_settings", lambda: settings)
+
+    response = review_api.relevant_opportunities(
+        session=session, role="data_engineering", limit=10
+    )
+
+    assert len(response) == 1
+    assert response[0]["id"] == cluster.id
+    assert response[0]["role_category"] == "data_engineering"
+
+
+def test_relevant_opportunities_honors_query_min_relevance_override(monkeypatch):
+    session = _session()
+    cluster = _make_cluster(session, title="Senior Data Engineer")
+    session.commit()
+
+    settings = KOISSettings(
+        availability_profile_json='{"data_engineering": 1}',
+        digest_min_relevance_score=0.9,
+    )
+    monkeypatch.setattr(review_api, "get_settings", lambda: settings)
+
+    response = review_api.relevant_opportunities(
+        session=session, min_relevance_score=0.5, limit=10
+    )
+    returned_ids = {item["id"] for item in response}
+
+    assert cluster.id in returned_ids
+
+
+def test_relevant_opportunities_limit_applies_after_fresh_relevance_sort(monkeypatch):
+    session = _session()
+    stale_high = _make_cluster(session, title="Project Manager")
+    fresh_high = _make_cluster(session, title="Senior Data Engineer")
+    stale_high.relevance_score = 0.99
+    fresh_high.relevance_score = 0.01
+    session.commit()
+
+    settings = KOISSettings(
+        availability_profile_json='{"data_engineering": 2}',
+        digest_min_relevance_score=0.45,
+    )
+    monkeypatch.setattr(review_api, "get_settings", lambda: settings)
+
+    response = review_api.relevant_opportunities(session=session, limit=1)
+
+    assert len(response) == 1
+    assert response[0]["id"] == fresh_high.id
+
+
 def test_invalid_availability_profile_json_raises():
     settings = KOISSettings(availability_profile_json="not-json")
     with pytest.raises(ValueError):

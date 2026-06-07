@@ -115,7 +115,11 @@ class OpportunityFilterPolicy:
         return result
 
     def should_include_digest(
-        self, cluster: OpportunityCluster, *, evaluated_relevance: float | None = None
+        self,
+        cluster: OpportunityCluster,
+        *,
+        evaluated_relevance: float | None = None,
+        min_relevance_override: float | None = None,
     ) -> bool:
         if cluster.review_status in (ReviewStatus.IGNORED, ReviewStatus.WATCH_ONLY):
             return False
@@ -129,7 +133,12 @@ class OpportunityFilterPolicy:
             if evaluated_relevance is not None
             else cluster.relevance_score
         )
-        return relevance >= self.min_relevance
+        threshold = (
+            min_relevance_override
+            if min_relevance_override is not None
+            else self.min_relevance
+        )
+        return relevance >= threshold
 
     def _classify_cluster(self, cluster: OpportunityCluster) -> tuple[str | None, list[str]]:
         haystack_parts = [cluster.title, cluster.customer]
