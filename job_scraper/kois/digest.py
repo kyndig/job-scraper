@@ -136,9 +136,7 @@ def send_digest_items(
             if response is None:
                 continue
             slack_ts = response.get("ts")
-        else:
-            slack_ts = None
+            mark_digest_sent(session, digest_item, slack_ts)
 
-        mark_digest_sent(session, digest_item, slack_ts)
         sent_payloads.append(payload.__dict__)
     return sent_payloads
