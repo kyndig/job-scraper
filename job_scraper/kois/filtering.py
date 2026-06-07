@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 from sqlalchemy.orm import Session
 
@@ -162,7 +163,7 @@ class OpportunityFilterPolicy:
             score = 0
             for keyword in keywords:
                 normalized = normalize_text(keyword)
-                if normalized and normalized in haystack:
+                if self._contains_keyword(haystack, normalized):
                     score += 1
             if score:
                 scores[role] = score
@@ -172,6 +173,13 @@ class OpportunityFilterPolicy:
         ranked = sorted(scores.items(), key=lambda item: (item[1], item[0]), reverse=True)
         role_tags = [role for role, _ in ranked[:3]]
         return ranked[0][0], role_tags
+
+    def _contains_keyword(self, haystack: str, keyword: str) -> bool:
+        if not keyword:
+            return False
+        escaped = re.escape(keyword).replace(r"\ ", r"\s+")
+        pattern = rf"(?<!\w){escaped}(?!\w)"
+        return re.search(pattern, haystack) is not None
 
     def _score_relevance(
         self, cluster: OpportunityCluster, role_category: str | None

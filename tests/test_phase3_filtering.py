@@ -16,11 +16,18 @@ def _session() -> Session:
     return Session(bind=engine, future=True)
 
 
-def _make_cluster(session: Session, *, title: str, confidence: float = 0.95):
-    if "project manager" in title.lower():
-        description = "Need a senior project manager to lead delivery and stakeholder coordination."
-    else:
-        description = "Need strong data engineer with dbt and airflow."
+def _make_cluster(
+    session: Session,
+    *,
+    title: str,
+    confidence: float = 0.95,
+    description: str | None = None,
+):
+    if description is None:
+        if "project manager" in title.lower():
+            description = "Need a senior project manager to lead delivery and stakeholder coordination."
+        else:
+            description = "Need strong data engineer with dbt and airflow."
     raw = upsert_raw_source_item(
         session,
         RawIngestionItem(
@@ -176,6 +183,22 @@ def test_relevant_opportunities_limit_applies_after_fresh_relevance_sort(monkeyp
 
     assert len(response) == 1
     assert response[0]["id"] == fresh_high.id
+
+
+def test_role_classification_uses_word_boundaries_for_keywords():
+    session = _session()
+    cluster = _make_cluster(
+        session,
+        title="Frontend JavaScript Developer",
+        description="Need a frontend specialist with javascript and react experience.",
+    )
+    settings = KOISSettings()
+    policy = OpportunityFilterPolicy(settings)
+
+    result = policy.evaluate_cluster(cluster)
+
+    assert result.role_category == "frontend"
+    assert "backend" not in result.role_tags
 
 
 def test_invalid_availability_profile_json_raises():
