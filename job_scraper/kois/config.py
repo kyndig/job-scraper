@@ -74,7 +74,7 @@ def _parse_int_mapping_json(raw_value: str, *, field_name: str) -> dict[str, int
     for key, value in decoded.items():
         if not isinstance(key, str):
             raise ValueError(f"{field_name} keys must be strings.")
-        if not isinstance(value, int):
+        if isinstance(value, bool) or not isinstance(value, int):
             raise ValueError(
                 f"{field_name}[{key!r}] must be an integer capacity value."
             )
