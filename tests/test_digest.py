@@ -265,3 +265,96 @@ def test_digest_cadence_leaves_unsent_for_later_delivery():
     assert sent == []
     assert len(cluster.digest_items) == 1
     assert cluster.digest_items[0].sent_at is None
+
+
+def test_digest_cadence_ignores_unsent_rows_for_latest_sent_lookup(monkeypatch):
+    session = _session()
+    raw = upsert_raw_source_item(
+        session,
+        RawIngestionItem(
+            source_type="scraper",
+            source_name="mercell",
+            external_id="id-cadence-null-order",
+            raw_body="raw-data",
+        ),
+    )
+    record = create_extracted_record(
+        session,
+        {
+            "raw_source_item_id": raw.id,
+            "title": "Assignment",
+            "customer": "Kynd",
+            "broker": "mercell",
+            "source_url": "https://example.com/cadence-null-order",
+            "deadline": "2026-06-30",
+            "description": "desc",
+            "summary": "sum",
+            "extracted_data": {},
+            "extraction_confidence": 0.95,
+        },
+    )
+    sent_cluster = create_or_update_cluster(
+        session=session,
+        cluster_key="https://example.com/sent",
+        title="Sent",
+        customer="Kynd",
+        confidence=0.95,
+        review_status=ReviewStatus.AUTO_ACCEPTED,
+    )
+    sent_item = create_digest_item(
+        session=session,
+        cluster=sent_cluster,
+        status=ReviewStatus.AUTO_ACCEPTED,
+        payload={"cluster_id": sent_cluster.id},
+    )
+    mark_digest_sent(session, sent_item, slack_ts="123.45")
+
+    unsent_cluster = create_or_update_cluster(
+        session=session,
+        cluster_key="https://example.com/unsent",
+        title="Unsent",
+        customer="Kynd",
+        confidence=0.95,
+        review_status=ReviewStatus.AUTO_ACCEPTED,
+    )
+    create_digest_item(
+        session=session,
+        cluster=unsent_cluster,
+        status=ReviewStatus.AUTO_ACCEPTED,
+        payload={"cluster_id": unsent_cluster.id},
+    )
+
+    candidate_cluster = create_or_update_cluster(
+        session=session,
+        cluster_key="https://example.com/candidate",
+        title="Candidate",
+        customer="Kynd",
+        confidence=0.95,
+        review_status=ReviewStatus.AUTO_ACCEPTED,
+    )
+    attach_cluster_source(session, candidate_cluster, record, 0.95, "url")
+    candidate_cluster.primary_source_record_id = record.id
+    candidate_cluster.relevance_score = 0.9
+    session.commit()
+
+    original_execute = session.execute
+
+    def _execute_with_postgres_nulls_first(statement, *args, **kwargs):
+        if "SELECT digest_items.sent_at" in str(statement):
+            assert "sent_at IS NOT NULL" in str(statement)
+        return original_execute(statement, *args, **kwargs)
+
+    monkeypatch.setattr(session, "execute", _execute_with_postgres_nulls_first)
+
+    sent = send_digest_items(
+        session=session,
+        clusters=[candidate_cluster],
+        slack=SlackPoster(optional=True),
+        live_posting=False,
+        channel="job-posting",
+        settings=KOISSettings(digest_cadence_minutes=120),
+    )
+    session.commit()
+
+    assert sent == []
+    assert candidate_cluster.digest_items[0].sent_at is None
