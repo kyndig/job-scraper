@@ -201,6 +201,49 @@ def test_role_classification_uses_word_boundaries_for_keywords():
     assert "backend" not in result.role_tags
 
 
+def test_sparse_cluster_classifies_as_generalist():
+    session = _session()
+    cluster = create_or_update_cluster(
+        session=session,
+        cluster_key="https://example.com/sparse",
+        title=None,
+        customer=None,
+        confidence=0.95,
+        review_status=ReviewStatus.AUTO_ACCEPTED,
+    )
+    settings = KOISSettings()
+    policy = OpportunityFilterPolicy(settings)
+
+    result = policy.evaluate_cluster(cluster)
+
+    assert result.role_category == "generalist"
+    assert result.role_tags == []
+
+
+def test_relevant_opportunities_role_generalist_includes_sparse_cluster(monkeypatch):
+    session = _session()
+    cluster = create_or_update_cluster(
+        session=session,
+        cluster_key="https://example.com/sparse-generalist",
+        title=None,
+        customer=None,
+        confidence=0.95,
+        review_status=ReviewStatus.AUTO_ACCEPTED,
+    )
+    session.commit()
+
+    settings = KOISSettings(digest_min_relevance_score=0.1)
+    monkeypatch.setattr(review_api, "get_settings", lambda: settings)
+
+    response = review_api.relevant_opportunities(
+        session=session, role="generalist", limit=10
+    )
+    returned_ids = {item["id"] for item in response}
+
+    assert cluster.id in returned_ids
+    assert response[0]["role_category"] == "generalist"
+
+
 def test_invalid_availability_profile_json_raises():
     settings = KOISSettings(availability_profile_json="not-json")
     with pytest.raises(ValueError):

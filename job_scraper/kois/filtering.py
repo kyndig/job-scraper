@@ -78,7 +78,7 @@ DEFAULT_ROLE_TAXONOMY: dict[str, list[str]] = {
 
 @dataclass(frozen=True)
 class ClusterFilteringResult:
-    role_category: str | None
+    role_category: str
     role_tags: list[str]
     relevance_score: float
     relevance_rationale: str
@@ -141,7 +141,7 @@ class OpportunityFilterPolicy:
         )
         return relevance >= threshold
 
-    def _classify_cluster(self, cluster: OpportunityCluster) -> tuple[str | None, list[str]]:
+    def _classify_cluster(self, cluster: OpportunityCluster) -> tuple[str, list[str]]:
         haystack_parts = [cluster.title, cluster.customer]
         for source in cluster.sources:
             record = source.record
@@ -156,7 +156,7 @@ class OpportunityFilterPolicy:
             )
         haystack = normalize_text(" ".join(part or "" for part in haystack_parts))
         if not haystack:
-            return None, []
+            return "generalist", []
 
         scores: dict[str, int] = {}
         for role, keywords in self.role_taxonomy.items():
