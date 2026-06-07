@@ -54,7 +54,7 @@ IMAP (`oppdrag@kynd.no`):
 ### Setup
 
 ```bash
-python -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 pip install ".[dev]"
 python -m playwright install chromium
@@ -89,7 +89,7 @@ Useful endpoints:
 
 ```bash
 ruff check .
-pytest
+python -m pytest
 ```
 
 ### Notes
