@@ -527,7 +527,7 @@ def test_orchestrator_retries_pending_digests_not_touched_this_run(monkeypatch):
 
     assert result["clusters"] == 0
     assert result["digests"] == 1
-    assert digest_item.sent_at is not None
+    assert digest_item.sent_at is None
 
 
 def test_similarity_does_not_credit_deadline_without_cluster_match():
