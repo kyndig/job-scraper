@@ -1,5 +1,5 @@
-from datetime import datetime, timezone
 import logging
+from datetime import UTC, datetime
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
@@ -55,7 +55,7 @@ class FakeImapConnection:
 
 class FailingLoginConnection(FakeImapConnection):
     def login(self, _username, _password):
-        raise Exception("AUTHENTICATIONFAILED")
+        raise RuntimeError("AUTHENTICATIONFAILED")
 
 
 def _session() -> Session:
@@ -93,7 +93,7 @@ def test_fetch_imap_items_maps_email_to_raw_item(monkeypatch):
     assert items[0].source_type == "email"
     assert items[0].external_id == "<msg1@example.com>"
     assert "https://example.com/job/1" in items[0].raw_body
-    assert items[0].received_at == datetime(2026, 6, 5, 12, 0, tzinfo=timezone.utc)
+    assert items[0].received_at == datetime(2026, 6, 5, 12, 0, tzinfo=UTC)
 
 
 def test_fetch_imap_items_disabled_without_accounts(caplog):

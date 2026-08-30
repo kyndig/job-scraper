@@ -1,15 +1,19 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+
+from job_scraper.kois import review_api
 from job_scraper.kois.agreement_signals import (
     build_agreement_signal_payload,
     sync_procurement_agreement_signal,
 )
 from job_scraper.kois.analytics import phase2_summary
+from job_scraper.kois.clustering import cluster_records
+from job_scraper.kois.config import KOISSettings
 from job_scraper.kois.db import Base
+from job_scraper.kois.domain import RawIngestionItem, SourceKind, infer_source_kind
 from job_scraper.kois.extraction import RecordExtractor
 from job_scraper.kois.gaps import discover_missing_agreement_gaps, set_gap_status
 from job_scraper.kois.ingestion.procurement_adapter import fetch_procurement_items
-from job_scraper.kois.config import KOISSettings
 from job_scraper.kois.repository import (
     AGREEMENT_GAP_AUTO_CLOSE_NOTE,
     create_extracted_record,
@@ -20,10 +24,7 @@ from job_scraper.kois.repository import (
     upsert_agreement_signal,
     upsert_raw_source_item,
 )
-from job_scraper.kois import review_api
 from job_scraper.kois.schema import GapStatus
-from job_scraper.kois.clustering import cluster_records
-from job_scraper.kois.domain import RawIngestionItem, SourceKind, infer_source_kind
 
 
 def _session() -> Session:

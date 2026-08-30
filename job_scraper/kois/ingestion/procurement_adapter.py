@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.request import Request, urlopen
 
 from job_scraper.kois.config import KOISSettings
@@ -11,7 +11,7 @@ from job_scraper.kois.utils import content_hash, normalize_text
 
 def _load_json_url(url: str) -> list[dict]:
     request = Request(url=url, headers={"Accept": "application/json"})
-    with urlopen(request, timeout=20) as response:  # noqa: S310
+    with urlopen(request, timeout=20) as response:
         payload = json.loads(response.read().decode("utf-8"))
     if isinstance(payload, dict):
         return payload.get("items", [])
@@ -63,7 +63,7 @@ def _normalize_notice(source_name: str, notice: dict) -> RawIngestionItem:
         external_id=external_id,
         raw_body=json.dumps(payload, ensure_ascii=False, sort_keys=True),
         metadata=metadata,
-        received_at=datetime.now(timezone.utc),
+        received_at=datetime.now(UTC),
     )
 
 
@@ -92,7 +92,7 @@ def fetch_procurement_items(settings: KOISSettings) -> list[RawIngestionItem]:
         notices_by_source[source_name] = _parse_embedded_json(source_payload)
 
     for source_name, source_url in procurement_feed_urls_by_source.items():
-        if source_name in notices_by_source and notices_by_source[source_name]:
+        if notices_by_source.get(source_name):
             continue
         try:
             notices_by_source[source_name] = _load_json_url(source_url)

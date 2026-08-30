@@ -1,11 +1,10 @@
 from collections.abc import Callable
 
-from sqlalchemy import inspect
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 
+from job_scraper.kois import schema
 from job_scraper.kois.db import Base
-from job_scraper.kois import schema  # noqa: F401
 
 INIT_MIGRATION_ID = "20260605_kois_phase1_init"
 DROP_CONTENT_HASH_UNIQUE_MIGRATION_ID = "20260606_drop_raw_source_content_hash_unique"

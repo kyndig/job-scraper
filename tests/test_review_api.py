@@ -1,3 +1,4 @@
+from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from starlette.requests import Request
@@ -99,9 +100,9 @@ def test_cluster_detail_missing_returns_404():
     try:
         review_api.get_cluster_detail(cluster_id=999, session=session)
         raised = False
-    except Exception as exc:
+    except HTTPException as exc:
         raised = True
-        assert getattr(exc, "status_code", None) == 404
+        assert exc.status_code == 404
     assert raised
 
 

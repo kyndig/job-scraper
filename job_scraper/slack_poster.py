@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import os
+
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-from slack_sdk.models.blocks import HeaderBlock, SectionBlock, DividerBlock
-from slack_sdk.models.blocks.basic_components import PlainTextObject, MarkdownTextObject
+from slack_sdk.models.blocks import DividerBlock, HeaderBlock, SectionBlock
+from slack_sdk.models.blocks.basic_components import MarkdownTextObject, PlainTextObject
 
 from job_scraper.models import Job
+
 
 class SlackPoster:
     client: WebClient

@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
 from job_scraper.kois.config import KOISSettings
 from job_scraper.kois.schema import OpportunityCluster, ReviewStatus
 from job_scraper.kois.utils import normalize_text
-
 
 DEFAULT_ROLE_TAXONOMY: dict[str, list[str]] = {
     "data_engineering": [

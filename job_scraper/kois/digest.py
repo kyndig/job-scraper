@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -88,9 +88,9 @@ def _cadence_blocked(session: Session, cadence_minutes: int) -> bool:
     if latest_sent_at is None:
         return False
     if latest_sent_at.tzinfo is None:
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = datetime.now(UTC).replace(tzinfo=None)
     else:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
     return latest_sent_at > (now - timedelta(minutes=cadence_minutes))
 
 

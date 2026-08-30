@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -276,7 +276,7 @@ def create_digest_item(
 
 def mark_digest_sent(session: Session, item: DigestItem, slack_ts: str | None) -> None:
     item.slack_message_ts = slack_ts
-    item.sent_at = datetime.now(timezone.utc)
+    item.sent_at = datetime.now(UTC)
     session.flush()
 
 
@@ -433,7 +433,7 @@ def upsert_ingest_cursor(
     ).scalar_one_or_none()
     if cursor:
         cursor.last_uid = last_uid
-        cursor.updated_at = datetime.now(timezone.utc)
+        cursor.updated_at = datetime.now(UTC)
         session.flush()
         return cursor
 

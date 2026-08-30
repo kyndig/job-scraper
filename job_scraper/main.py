@@ -2,9 +2,9 @@ import argparse
 import asyncio
 import logging
 import os
-from playwright.async_api import Browser, async_playwright
-from typing import List
+
 from dotenv import load_dotenv
+from playwright.async_api import Browser, async_playwright
 
 from job_scraper.kois.config import get_settings
 from job_scraper.kois.db import SessionLocal, create_db_engine
@@ -18,6 +18,7 @@ from job_scraper.scrapers.verama import VeramaScraper
 from job_scraper.scrapers.witted import WittedScraper
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 SCRAPER_CLASSES = [
     MercellScraper,
@@ -43,14 +44,14 @@ def _has_scraper_credentials(job_platform: str) -> bool:
     return bool(os.getenv(f"{prefix}_USERNAME") and os.getenv(f"{prefix}_PASSWORD"))
 
 
-async def run_scrapers() -> List[Job]:
+async def run_scrapers() -> list[Job]:
     async with async_playwright() as p:
         browser: Browser = await p.chromium.launch()
         scrapers = []
         for scraper_cls in SCRAPER_CLASSES:
             platform = scraper_cls.job_platform
             if not _has_scraper_credentials(platform):
-                logging.warning(
+                logger.warning(
                     "Skipping %s: missing %s_USERNAME or %s_PASSWORD",
                     platform,
                     platform.upper(),
@@ -69,8 +70,8 @@ async def run_scrapers() -> List[Job]:
         scraped_jobs = []
         for scraper, result in zip(scrapers, results):
             if isinstance(result, Exception):
-                logging.error(
-                    f"Could not scrape {scraper.job_platform}: error {result}"
+                logger.error(
+                    "Could not scrape %s: error %s", scraper.job_platform, result
                 )
             else:
                 scraped_jobs.extend(result)
@@ -84,15 +85,15 @@ async def main(argv: list[str] | None = None):
     settings = get_settings()
     skip_scrapers = args.email_only or settings.skip_scrapers
     if skip_scrapers:
-        logging.info("Skipping broker scrapers (email-only run)")
-        scraped_jobs: List[Job] = []
+        logger.info("Skipping broker scrapers (email-only run)")
+        scraped_jobs: list[Job] = []
     else:
         scraped_jobs = await run_scrapers()
     engine = create_db_engine()
     run_migrations(engine)
     with SessionLocal() as session:
         result = run_kois_pipeline(session=session, scraped_jobs=scraped_jobs)
-    logging.info("KOIS run complete: %s", result)
+    logger.info("KOIS run complete: %s", result)
 
 
 if __name__ == "__main__":

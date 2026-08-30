@@ -4,11 +4,10 @@ import re
 from urllib.parse import urlparse
 
 from job_scraper.kois.domain import infer_source_kind
-from job_scraper.models import Job
 from job_scraper.kois.schema import RawSourceItem
 from job_scraper.kois.utils import normalize_text, normalize_url
+from job_scraper.models import Job
 from job_scraper.summarizer import JobDescriptionSummarizer
-
 
 TITLE_PATTERN = re.compile(r"(oppdrag|assignment|rolle)[:\-]\s*(.+)", re.IGNORECASE)
 DEADLINE_PATTERN = re.compile(r"(frist|deadline)[:\-]\s*([^\n]+)", re.IGNORECASE)
@@ -133,4 +132,4 @@ def make_cluster_key(payload: dict) -> str:
     title = normalize_text(payload.get("title"))
     customer = normalize_text(payload.get("customer"))
     deadline = normalize_text(payload.get("deadline"))
-    return "|".join([title, customer, deadline])
+    return f"{title}|{customer}|{deadline}"
