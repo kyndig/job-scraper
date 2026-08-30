@@ -139,6 +139,26 @@ def _imap_status_ok(status) -> bool:
     return status == "OK"
 
 
+def _uids_at_or_after(response, since_uid: int) -> list[bytes]:
+    """Keep SEARCH hits at or after since_uid.
+
+    IMAP treats ``*`` as the mailbox's highest UID, so ``UID n:*`` still
+    returns that message when n is larger than any assigned UID.  Filtering
+    here is what makes last_uid + 1 a real watermark.
+    """
+    if not response or not response[0]:
+        return []
+    selected: list[bytes] = []
+    for uid in response[0].split():
+        try:
+            uid_value = int(uid)
+        except (TypeError, ValueError):
+            continue
+        if uid_value >= since_uid:
+            selected.append(uid)
+    return selected
+
+
 def fetch_account_items(
     account: ImapAccount, session: Session | None = None
 ) -> list[RawIngestionItem]:
@@ -159,10 +179,10 @@ def fetch_account_items(
                 f"IMAP select failed for {account.source_name} mailbox {account.mailbox}"
             )
         status, response = connection.uid("SEARCH", None, f"UID {since_uid}:*")
-        if not _imap_status_ok(status) or not response or not response[0]:
+        if not _imap_status_ok(status):
             return raw_items
 
-        for uid in response[0].split():
+        for uid in _uids_at_or_after(response, since_uid):
             fetch_status, payload = connection.uid("FETCH", uid, "(RFC822)")
             if not _imap_status_ok(fetch_status) or not payload:
                 continue
