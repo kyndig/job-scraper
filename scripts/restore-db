@@ -29,6 +29,7 @@ db_name="$(read_env KOIS_DB_NAME kois)"
 db_user="$(read_env KOIS_DB_USER kois)"
 
 echo "Restoring $DUMP into database $db_name as $db_user (destructive)."
+set +e
 docker compose exec -T db pg_restore \
   -U postgres \
   --clean \
@@ -36,4 +37,14 @@ docker compose exec -T db pg_restore \
   --dbname="$db_name" \
   --no-owner \
   --role="$db_user" <"$DUMP"
+restore_status=$?
+set -e
+# pg_restore --clean --if-exists often exits 1 after DROP warnings on a successful restore.
+if [[ "$restore_status" -ge 2 ]]; then
+  echo "pg_restore failed with status $restore_status" >&2
+  exit "$restore_status"
+fi
+if [[ "$restore_status" -eq 1 ]]; then
+  echo "pg_restore reported warnings (expected with --clean --if-exists)."
+fi
 echo "Restore complete."
