@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BACKUP_DIR="${KOIS_BACKUP_DIR:-$ROOT/backups}"
+KEEP_DAYS="${KOIS_BACKUP_KEEP_DAYS:-30}"
+STAMP="$(date +%Y-%m-%dT%H%M%S)"
+OUT="$BACKUP_DIR/kois-$STAMP.dump"
+
+cd "$ROOT"
+mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR"
+
+if [[ ! -f "$ROOT/.env" ]]; then
+  echo "Missing .env. Run ./scripts/secrets-decrypt first." >&2
+  exit 1
+fi
+
+# Load KOIS_DB_NAME without executing the rest of .env.
+db_name="$(python3 - <<'PY'
+from pathlib import Path
+name = "kois"
+for line in Path(".env").read_text().splitlines():
+    if line.startswith("KOIS_DB_NAME="):
+        name = line.split("=", 1)[1].strip() or name
+print(name)
+PY
+)"
+
+docker compose exec -T db pg_dump -U postgres -Fc "$db_name" >"$OUT"
+chmod 600 "$OUT"
+echo "Wrote $OUT"
+
+find "$BACKUP_DIR" -name 'kois-*.dump' -mtime +"$KEEP_DAYS" -delete

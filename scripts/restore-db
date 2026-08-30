@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DUMP="${1:-}"
+
+if [[ -z "$DUMP" || ! -f "$DUMP" ]]; then
+  echo "Usage: $0 backups/kois-YYYY-mm-ddTHHMMSS.dump" >&2
+  exit 1
+fi
+
+cd "$ROOT"
+read_env() {
+  local key="$1"
+  local default="$2"
+  python3 - "$key" "$default" <<'PY'
+from pathlib import Path
+import sys
+key, default = sys.argv[1], sys.argv[2]
+value = default
+for line in Path(".env").read_text().splitlines():
+    if line.startswith(key + "="):
+        value = line.split("=", 1)[1].strip() or default
+        break
+print(value)
+PY
+}
+
+db_name="$(read_env KOIS_DB_NAME kois)"
+db_user="$(read_env KOIS_DB_USER kois)"
+
+echo "Restoring $DUMP into database $db_name as $db_user (destructive)."
+docker compose exec -T db pg_restore \
+  -U postgres \
+  --clean \
+  --if-exists \
+  --dbname="$db_name" \
+  --no-owner \
+  --role="$db_user" <"$DUMP"
+echo "Restore complete."

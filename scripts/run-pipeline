@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LOCK_DIR="${KOIS_PIPELINE_LOCK:-/tmp/kois-pipeline.lock}"
+
+cd "$ROOT"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  echo "KOIS pipeline already running; skipping."
+  exit 0
+fi
+cleanup() { rmdir "$LOCK_DIR" 2>/dev/null || true; }
+trap cleanup EXIT
+
+if [[ ! -f "$ROOT/.env" ]]; then
+  echo "Missing .env. Run ./scripts/secrets-decrypt first." >&2
+  exit 1
+fi
+
+docker compose --profile batch run --rm pipeline "$@"

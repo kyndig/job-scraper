@@ -32,7 +32,8 @@ KOIS does not own:
 - Keep field-level provenance where source values differ.
 - Use LLMs conservatively for extraction, classification, comparison, and drafting, not as the sole decision-maker.
 - Keep phase 1 lightweight: speed matters more than generic configurability.
-- Slack, Gemini, Notion, and broker portals are replaceable integrations, not architectural lock-ins.
+- Slack, Anthropic/Kimi, Notion, and broker portals are replaceable integrations, not architectural lock-ins.
+- Secrets never live in git as plaintext. Team secrets are SOPS+age ciphertext; each operator has a private age key.
 - Database is source of truth. Notion is a notebook or imported reference source.
 
 ## Initial Priorities
@@ -78,7 +79,7 @@ Ingest assignment emails (including `oppdrag@kynd.no` and additional configured 
 
 Success metric: KOIS becomes a searchable assignment archive with fewer duplicate distractions than email.
 
-Implementation status: completed for now. Current implementation uses Postgres-backed persistence, scraper + multi-mailbox IMAP ingestion with persisted UID cursors, cluster/source comparison records, a review API and `/ui` inbox, and digest-item persistence. Hosting is a separate Docker Compose stack intended to sit next to Forgejo; live Slack remains off until IMAP ingest is confirmed.
+Implementation status: completed for now. Current implementation uses Postgres-backed persistence, scraper + multi-mailbox IMAP ingestion with persisted UID cursors, cluster/source comparison records, a review API and `/ui` inbox, and digest-item persistence. Hosting is Docker Compose on macOS (M1 now, Mac Mini next) with a dedicated Postgres role, SOPS+age secrets in git as ciphertext, and launchd for pipeline/backup; live Slack remains off until IMAP ingest is confirmed.
 
 ### Phase 2: Market And Agreement Intelligence
 
