@@ -15,11 +15,30 @@ export KOIS_PIPELINE_ROOT="$ROOT"
 exec python3 - "$@" <<'PY'
 import fcntl
 import os
+import shutil
 import subprocess
 import sys
 
 lock_path = os.environ["KOIS_PIPELINE_LOCK_FILE"]
 os.chdir(os.environ["KOIS_PIPELINE_ROOT"])
+
+# Earlier revisions used this path as a mkdir lock directory.
+if os.path.isdir(lock_path):
+    pid_path = os.path.join(lock_path, "pid")
+    try:
+        old_pid = int(open(pid_path, encoding="utf-8").read().strip())
+    except (OSError, ValueError):
+        old_pid = None
+    if old_pid is not None:
+        try:
+            os.kill(old_pid, 0)
+        except OSError:
+            pass
+        else:
+            print("KOIS pipeline already running; skipping.")
+            sys.exit(0)
+    shutil.rmtree(lock_path)
+
 fh = open(lock_path, "w")
 try:
     fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
