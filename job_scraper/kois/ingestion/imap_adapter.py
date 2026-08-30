@@ -4,7 +4,7 @@ import email
 import imaplib
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.header import decode_header
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
@@ -110,11 +110,11 @@ def _message_received_at(message: email.message.Message) -> datetime:
         try:
             parsed = parsedate_to_datetime(raw_date)
             if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            return parsed.astimezone(timezone.utc)
+                parsed = parsed.replace(tzinfo=UTC)
+            return parsed.astimezone(UTC)
         except (TypeError, ValueError, OverflowError):
             pass
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _since_uid_for_account(
@@ -218,7 +218,7 @@ def fetch_account_items(
             fetched_uids.append(int(uid_text))
     except ImapIngestError:
         raise
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise ImapIngestError(
             f"IMAP fetch failed for {account.source_name}: {exc}"
         ) from exc

@@ -1,10 +1,9 @@
-from job_scraper.scrapers.base import JobScraper
+import logging
+
 from playwright.async_api import Page
-from typing import List
 
 from job_scraper.models import Job, JobOverview
-
-import logging
+from job_scraper.scrapers.base import JobScraper
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,9 +22,9 @@ class VeramaScraper(JobScraper):
         await page.get_by_role("button", name="Log in").click()
 
     async def _traverse_job_pages(
-        self, page: Page, job_overviews: List[JobOverview]
-    ) -> List[Job]:
-        jobs: List[Job] = []
+        self, page: Page, job_overviews: list[JobOverview]
+    ) -> list[Job]:
+        jobs: list[Job] = []
         for job_overview in job_overviews:
             await page.goto(
                 job_overview.job_uri,
@@ -60,7 +59,7 @@ class VeramaScraper(JobScraper):
 
         return jobs
 
-    async def _parse_job_overview(self, page: Page) -> List[JobOverview]:
+    async def _parse_job_overview(self, page: Page) -> list[JobOverview]:
         # https://app.verama.com/app/job-requests
         await page.goto(
             f"{self.base_url}/job-requests?page=0&size=20&sortConfig=%5B%7B%22sortBy%22%3A%22firstDayOfApplications%22%2C%22order%22%3A%22DESC%22%7D%5D&filtersConfig=%7B%22location%22%3A%7B%22id%22%3Anull%2C%22signature%22%3A%22%22%2C%22city%22%3A%22Oslo%22%2C%22country%22%3A%22Norway%22%2C%22name%22%3A%22Oslo%2C%20Norway%22%2C%22locationId%22%3A%22here%3Acm%3Anamedplace%3A20421988%22%2C%22countryCode%22%3A%22NOR%22%2C%22suggestedPhoneCode%22%3A%22NO%22%7D%2C%22remote%22%3A%5B%5D%2C%22query%22%3A%22%22%2C%22skillRoleCategories%22%3A%5B%5D%2C%22frequency%22%3A%22DAILY%22%2C%22radius%22%3A20000%2C%22dedicated%22%3Afalse%2C%22originIds%22%3A%5B%5D%2C%22favouritesOnly%22%3Afalse%2C%22recommendedOnly%22%3Afalse%2C%22languages%22%3A%5B%5D%2C%22level%22%3A%5B%5D%2C%22skillIds%22%3A%5B%5D%2C%22skills%22%3A%5B%5D%7D",
@@ -72,10 +71,10 @@ class VeramaScraper(JobScraper):
         job_sections = await page.query_selector_all('a[class="route-section"]')
 
         if not job_sections:
-            self.logging.info(f"Could not find any job listings for {self.job_platform}")
+            self.logger.info("Could not find any job listings for %s", self.job_platform)
             return []
 
-        jobs: List[JobOverview] = []
+        jobs: list[JobOverview] = []
         for job_section in job_sections:
             job_uri = await job_section.get_attribute("href")
 
@@ -86,5 +85,5 @@ class VeramaScraper(JobScraper):
 
             jobs.append(JobOverview(title=job_title, job_uri=self.base_url + job_uri))
 
-        logging.info(f"Found {len(jobs)} jobs from {self.job_platform}")
+        self.logger.info("Found %s jobs from %s", len(jobs), self.job_platform)
         return jobs

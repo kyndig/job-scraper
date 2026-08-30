@@ -44,11 +44,11 @@ def run_kois_pipeline(
     ingestion_items.extend(jobs_to_raw_items(scraped_jobs))
     try:
         ingestion_items.extend(fetch_imap_items(settings, session))
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("IMAP ingest failed; continuing with other sources")
     try:
         ingestion_items.extend(fetch_procurement_items(settings))
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("Procurement ingest failed; continuing with other sources")
 
     raw_items = [upsert_raw_source_item(session, item) for item in ingestion_items]
@@ -73,7 +73,7 @@ def run_kois_pipeline(
             record = create_extracted_record(session, payload)
             records.append(record)
             record_by_raw_source_id[raw_item.id] = record
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.exception("Extraction failed for raw source %s", raw_item.id)
             raw_item.extraction_error = str(exc)
             session.flush()

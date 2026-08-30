@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from job_scraper.kois.config import KOISSettings
 from job_scraper.kois.digest import send_digest_items
+from job_scraper.kois.domain import RawIngestionItem
 from job_scraper.kois.repository import (
     attach_cluster_source,
     create_digest_item,
@@ -12,7 +13,6 @@ from job_scraper.kois.repository import (
     upsert_raw_source_item,
 )
 from job_scraper.kois.schema import Base, ReviewStatus
-from job_scraper.kois.domain import RawIngestionItem
 from job_scraper.slack_poster import SlackPoster
 
 

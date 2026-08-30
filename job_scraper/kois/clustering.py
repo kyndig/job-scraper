@@ -19,7 +19,6 @@ from job_scraper.kois.schema import (
 )
 from job_scraper.kois.utils import normalize_text, normalize_url
 
-
 SOURCE_PRIORITY = {
     "public_tender": 100,
     "procurement_platform": 90,
@@ -184,14 +183,13 @@ def _refresh_primary_sources(session: Session, clusters: list[OpportunityCluster
             cluster.primary_source_record_id = None
             session.flush()
             continue
-        primary = sorted(
+        primary = max(
             sources,
             key=lambda record: (
                 _source_rank(record),
                 record.extraction_confidence or 0.0,
                 record.id,
             ),
-            reverse=True,
-        )[0]
+        )
         cluster.primary_source_record_id = primary.id
         session.flush()

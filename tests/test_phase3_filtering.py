@@ -4,10 +4,15 @@ from sqlalchemy.orm import Session
 
 from job_scraper.kois import review_api
 from job_scraper.kois.config import KOISSettings
-from job_scraper.kois.filtering import OpportunityFilterPolicy, score_clusters
-from job_scraper.kois.repository import attach_cluster_source, create_extracted_record, create_or_update_cluster, upsert_raw_source_item
-from job_scraper.kois.schema import Base, ReviewStatus
 from job_scraper.kois.domain import RawIngestionItem
+from job_scraper.kois.filtering import OpportunityFilterPolicy, score_clusters
+from job_scraper.kois.repository import (
+    attach_cluster_source,
+    create_extracted_record,
+    create_or_update_cluster,
+    upsert_raw_source_item,
+)
+from job_scraper.kois.schema import Base, ReviewStatus
 
 
 def _session() -> Session:
@@ -253,7 +258,7 @@ def test_invalid_availability_profile_json_raises():
 def test_availability_profile_rejects_boolean_capacity_values():
     settings = KOISSettings(availability_profile_json='{"data_engineering": true}')
     with pytest.raises(
-        ValueError, match="must be an integer capacity value"
+        TypeError, match="must be an integer capacity value"
     ):
         _ = settings.availability_profile
 

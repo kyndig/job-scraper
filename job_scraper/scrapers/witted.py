@@ -1,8 +1,8 @@
-from job_scraper.scrapers.base import JobScraper
+
 from playwright.async_api import Page
-from typing import List
 
 from job_scraper.models import Job, JobOverview
+from job_scraper.scrapers.base import JobScraper
 
 
 class WittedScraper(JobScraper):
@@ -11,7 +11,7 @@ class WittedScraper(JobScraper):
 
     async def _login(self, page: Page): ...
 
-    async def _parse_job_overview(self, page: Page) -> List[JobOverview]:
+    async def _parse_job_overview(self, page: Page) -> list[JobOverview]:
         await page.goto(
             f"{self.base_url}/projects?location=norway",
             wait_until="domcontentloaded",
@@ -20,7 +20,7 @@ class WittedScraper(JobScraper):
 
         job_list_el = await page.query_selector_all("li[data-list-item]")
 
-        jobs: List[JobOverview] = []
+        jobs: list[JobOverview] = []
         for job_listing in job_list_el:
             job_title_el = await job_listing.query_selector("h2")
             job_title = await job_title_el.text_content()
@@ -37,13 +37,13 @@ class WittedScraper(JobScraper):
                 )
             )
 
-        self.logging.info(f"Found {len(jobs)} jobs from {self.job_platform}")
+        self.logger.info("Found %s jobs from %s", len(jobs), self.job_platform)
         return jobs
 
     async def _traverse_job_pages(
-        self, page: Page, job_overviews: List[JobOverview]
-    ) -> List[Job]:
-        jobs: List[Job] = []
+        self, page: Page, job_overviews: list[JobOverview]
+    ) -> list[Job]:
+        jobs: list[Job] = []
         for job_overview in job_overviews:
             await page.goto(
                 job_overview.job_uri,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 
 from job_scraper.kois.utils import normalize_text
@@ -14,7 +14,7 @@ class RawIngestionItem:
     external_id: str
     raw_body: str
     metadata: dict = field(default_factory=dict)
-    received_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    received_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 class SourceKind(str, Enum):

@@ -8,7 +8,6 @@ from job_scraper.kois.repository import delete_agreement_signal, upsert_agreemen
 from job_scraper.kois.schema import AgreementSignal, ExtractedRecord, RawSourceItem
 from job_scraper.kois.utils import normalize_text
 
-
 AGREEMENT_PHRASES = (
     "dps",
     "dynamic purchasing system",

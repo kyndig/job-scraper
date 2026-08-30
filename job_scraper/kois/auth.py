@@ -25,7 +25,7 @@ def review_access_decision(
 ) -> str:
     if not expected:
         return "allow"
-    if path in UNPROTECTED_PATHS or path.startswith("/docs") or path.startswith("/redoc"):
+    if path in UNPROTECTED_PATHS or path.startswith(("/docs", "/redoc")):
         return "allow"
     if provided == expected:
         return "allow"

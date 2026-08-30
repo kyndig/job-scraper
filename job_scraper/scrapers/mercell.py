@@ -1,10 +1,10 @@
-import logging
-
-from job_scraper.scrapers.base import JobScraper
+from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Page
-from typing import List
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from job_scraper.models import Job, JobOverview
+from job_scraper.scrapers.base import JobScraper
+
 
 class MercellScraper(JobScraper):
     base_url = "https://my.mercell.com"
@@ -17,19 +17,19 @@ class MercellScraper(JobScraper):
         await page.locator('//*[@id="password"]').fill(self.password)
         await page.get_by_role("button", name="Continue").click()
 
-    async def _parse_job_overview(self, page: Page) -> List[JobOverview]:
+    async def _parse_job_overview(self, page: Page) -> list[JobOverview]:
         for attempt in range(3):
             try:
                 await page.goto(
                     f"{self.base_url}/m/mts/MyTenders.aspx", wait_until="networkidle"
                 )
                 break
-            except Exception as e:
-                logging.error(f"Error: {e} (attempt {attempt+1}/3)")
+            except (PlaywrightError, PlaywrightTimeoutError) as e:
+                self.logger.error("Error: %s (attempt %s/3)", e, attempt + 1)
         else:
             raise TimeoutError("Cannot load MyTenders.aspx after 3 attempts")
 
-        jobs: List[JobOverview] = []
+        jobs: list[JobOverview] = []
         nxt_button_selector = 'a[class="nxt"]'
         while True:
             jobs.extend(await self._parse_job_overview_table(page))
@@ -41,10 +41,10 @@ class MercellScraper(JobScraper):
                 # No more pages
                 break
 
-        self.logging.info(f"Found {len(jobs)} jobs from {self.job_platform}")
+        self.logger.info("Found %s jobs from %s", len(jobs), self.job_platform)
         return jobs
 
-    async def _parse_job_overview_table(self, page: Page) -> List[JobOverview]:
+    async def _parse_job_overview_table(self, page: Page) -> list[JobOverview]:
         """
         Parses each <tr> in the table's <tbody>, extracting the job data
         from known columns. Returns a list of JobOverview.
@@ -53,12 +53,12 @@ class MercellScraper(JobScraper):
         table_selector = "#ctl00_ctl00_commonContent_mainContent_ucTenderList_gwTenders_GridViewTop_GridView"
         table = await page.query_selector(table_selector)
         if not table:
-            logging.warning("Could not find the table on this page.")
+            self.logger.warning("Could not find the table on this page.")
             return []
 
         # Get all <tr> inside <tbody>
         rows = await table.query_selector_all("tbody > tr")
-        results: List[JobOverview] = []
+        results: list[JobOverview] = []
 
         for row in rows:
             # Skip header rows if they contain <th>
@@ -113,9 +113,9 @@ class MercellScraper(JobScraper):
         return results
 
     async def _traverse_job_pages(
-        self, page: Page, job_overviews: List[JobOverview]
-    ) -> List[Job]:
-        jobs: List[Job] = []
+        self, page: Page, job_overviews: list[JobOverview]
+    ) -> list[Job]:
+        jobs: list[Job] = []
         for job_overview in job_overviews:
             await page.goto(
                 job_overview.job_uri,

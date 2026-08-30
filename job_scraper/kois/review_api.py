@@ -87,7 +87,7 @@ async def review_token_middleware(request: Request, call_next):
 def healthcheck(session: Session = Depends(get_db_session)):
     try:
         session.execute(text("SELECT 1"))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(
             status_code=503, detail=f"database unavailable: {exc}"
         ) from exc

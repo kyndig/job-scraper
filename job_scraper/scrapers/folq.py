@@ -1,10 +1,9 @@
-from job_scraper.scrapers.base import JobScraper
+import logging
+
 from playwright.async_api import Page
-from typing import List
 
 from job_scraper.models import Job, JobOverview
-
-import logging
+from job_scraper.scrapers.base import JobScraper
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,9 +24,9 @@ class FolqScraper(JobScraper):
         await page.wait_for_timeout(5000)
 
     async def _traverse_job_pages(
-        self, page: Page, job_overviews: List[JobOverview]
-    ) -> List[Job]:
-        jobs: List[Job] = []
+        self, page: Page, job_overviews: list[JobOverview]
+    ) -> list[Job]:
+        jobs: list[Job] = []
 
         for job_overview in job_overviews:
             await page.goto(
@@ -50,7 +49,7 @@ class FolqScraper(JobScraper):
 
         return jobs
 
-    async def _parse_job_overview(self, page: Page) -> List[JobOverview]:
+    async def _parse_job_overview(self, page: Page) -> list[JobOverview]:
         await page.goto(
             f"{self.base_url}/assignments/all?sorting=by-deadline",
             wait_until="domcontentloaded",
@@ -66,7 +65,7 @@ class FolqScraper(JobScraper):
             '//*[@id="main-content"]/div/div[2]/div/div[2]/div/div[2]/div'
         )
 
-        jobs: List[JobOverview] = []
+        jobs: list[JobOverview] = []
         for job_listing in job_list_el:
             job_title_and_href_el = await job_listing.query_selector("a")
             job_href = await job_title_and_href_el.get_attribute("href")
@@ -95,5 +94,5 @@ class FolqScraper(JobScraper):
                 )
             )
 
-        logging.info(f"Found {len(jobs)} jobs from {self.job_platform}")
+        self.logger.info("Found %s jobs from %s", len(jobs), self.job_platform)
         return jobs

@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from functools import cached_property
-from functools import lru_cache
+from functools import cached_property, lru_cache
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -107,11 +106,11 @@ def _parse_imap_accounts_json(raw_value: str) -> list[ImapAccount]:
     except json.JSONDecodeError as exc:
         raise ValueError(f"imap_accounts_json must be valid JSON: {exc}") from exc
     if not isinstance(decoded, list):
-        raise ValueError("imap_accounts_json must decode to an array of objects.")
+        raise TypeError("imap_accounts_json must decode to an array of objects.")
     accounts: list[ImapAccount] = []
     for index, item in enumerate(decoded):
         if not isinstance(item, dict):
-            raise ValueError(f"imap_accounts_json[{index}] must be an object.")
+            raise TypeError(f"imap_accounts_json[{index}] must be an object.")
         host = item.get("host")
         username = item.get("username")
         password = item.get("password")
@@ -120,7 +119,7 @@ def _parse_imap_accounts_json(raw_value: str) -> list[ImapAccount]:
                 f"imap_accounts_json[{index}] requires host, username, and password."
             )
         if not isinstance(host, str) or not isinstance(username, str) or not isinstance(password, str):
-            raise ValueError(
+            raise TypeError(
                 f"imap_accounts_json[{index}] host, username, and password must be strings."
             )
         mailbox = item.get("mailbox", "INBOX")
@@ -128,11 +127,11 @@ def _parse_imap_accounts_json(raw_value: str) -> list[ImapAccount]:
         port = item.get("port", 993)
         since_uid = item.get("since_uid", 1)
         if not isinstance(mailbox, str) or not isinstance(source_name, str):
-            raise ValueError(
+            raise TypeError(
                 f"imap_accounts_json[{index}] mailbox and source_name must be strings."
             )
         if not isinstance(port, int) or isinstance(port, bool):
-            raise ValueError(f"imap_accounts_json[{index}] port must be an integer.")
+            raise TypeError(f"imap_accounts_json[{index}] port must be an integer.")
         if not isinstance(since_uid, int) or isinstance(since_uid, bool) or since_uid < 1:
             raise ValueError(
                 f"imap_accounts_json[{index}] since_uid must be an integer >= 1."
@@ -157,13 +156,13 @@ def _parse_int_mapping_json(raw_value: str, *, field_name: str) -> dict[str, int
     except json.JSONDecodeError as exc:
         raise ValueError(f"{field_name} must be valid JSON: {exc}") from exc
     if not isinstance(decoded, dict):
-        raise ValueError(f"{field_name} must decode to an object.")
+        raise TypeError(f"{field_name} must decode to an object.")
     parsed: dict[str, int] = {}
     for key, value in decoded.items():
         if not isinstance(key, str):
-            raise ValueError(f"{field_name} keys must be strings.")
+            raise TypeError(f"{field_name} keys must be strings.")
         if isinstance(value, bool) or not isinstance(value, int):
-            raise ValueError(
+            raise TypeError(
                 f"{field_name}[{key!r}] must be an integer capacity value."
             )
         parsed[key.strip().lower()] = value
@@ -176,13 +175,13 @@ def _parse_role_taxonomy_json(raw_value: str) -> dict[str, list[str]]:
     except json.JSONDecodeError as exc:
         raise ValueError(f"role_taxonomy_json must be valid JSON: {exc}") from exc
     if not isinstance(decoded, dict):
-        raise ValueError("role_taxonomy_json must decode to an object.")
+        raise TypeError("role_taxonomy_json must decode to an object.")
     parsed: dict[str, list[str]] = {}
     for key, value in decoded.items():
         if not isinstance(key, str):
-            raise ValueError("role_taxonomy_json keys must be strings.")
+            raise TypeError("role_taxonomy_json keys must be strings.")
         if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
-            raise ValueError(
+            raise TypeError(
                 f"role_taxonomy_json[{key!r}] must be an array of strings."
             )
         parsed[key.strip().lower()] = [item.strip().lower() for item in value if item.strip()]

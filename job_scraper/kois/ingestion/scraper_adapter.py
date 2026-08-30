@@ -1,5 +1,5 @@
-from datetime import datetime, timezone
-from typing import Iterable
+from collections.abc import Iterable
+from datetime import UTC, datetime
 
 from job_scraper.kois.domain import RawIngestionItem
 from job_scraper.kois.utils import content_hash, normalize_text
@@ -17,7 +17,7 @@ def _fallback_external_id(job: Job) -> str:
 
 def jobs_to_raw_items(jobs: Iterable[Job]) -> list[RawIngestionItem]:
     raw_items: list[RawIngestionItem] = []
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for job in jobs:
         external_id = job.job_overview.job_uri or _fallback_external_id(job)
         metadata = {

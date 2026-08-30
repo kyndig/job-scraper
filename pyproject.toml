@@ -20,11 +20,11 @@ dependencies = [
     "python-multipart",
 ]
 
-[dependency-groups]
+[project.optional-dependencies]
 dev = [
     "pytest",
     "pytest-asyncio",
-    "ruff",
+    "ruff==0.16.5",
     "httpx",
 ]
 
@@ -33,4 +33,12 @@ include = ["job_scraper*"]
 
 [tool.setuptools.package-data]
 "job_scraper.kois" = ["templates/*.html"]
+
+[tool.ruff]
+target-version = "py312"
+extend-exclude = ["build", "*.egg-info"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI Depends()/Form() in defaults is the documented injection pattern.
+"job_scraper/kois/review_api.py" = ["B008"]
 
