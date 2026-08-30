@@ -53,11 +53,7 @@ def run_kois_pipeline(
 
     raw_items = [upsert_raw_source_item(session, item) for item in ingestion_items]
 
-    summarizer = (
-        JobDescriptionSummarizer(optional=True)
-        if settings.gemini_api_key
-        else None
-    )
+    summarizer = JobDescriptionSummarizer.from_settings(settings, optional=True)
     extractor = RecordExtractor(summarizer=summarizer)
     records = []
     record_by_raw_source_id: dict[int, object] = {}

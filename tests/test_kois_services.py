@@ -388,7 +388,6 @@ def test_orchestrator_reextracts_when_raw_body_changes(monkeypatch):
             "Settings",
             (),
             {
-                "gemini_api_key": None,
                 "run_live_slack": False,
                 "slack_channel": "job-posting",
             },
@@ -515,7 +514,6 @@ def test_orchestrator_retries_pending_digests_not_touched_this_run(monkeypatch):
             "Settings",
             (),
             {
-                "gemini_api_key": None,
                 "run_live_slack": False,
                 "slack_channel": "job-posting",
             },
@@ -620,7 +618,6 @@ def test_orchestrator_detaches_stale_cluster_source_when_reextraction_fails(monk
             "Settings",
             (),
             {
-                "gemini_api_key": None,
                 "run_live_slack": False,
                 "slack_channel": "job-posting",
             },
