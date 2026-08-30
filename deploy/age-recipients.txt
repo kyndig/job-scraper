@@ -1,0 +1,6 @@
+# Age public keys for SOPS, one age1... per line.
+# Private keys stay in ~/.config/kois/age.key (never commit).
+# Generate a key: ./scripts/secrets-keygen
+#
+# After adding a teammate's public key, an existing operator must
+# re-run ./scripts/secrets-encrypt so they can decrypt.
