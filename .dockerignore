@@ -1,0 +1,13 @@
+.venv
+.git
+.gitignore
+__pycache__
+.pytest_cache
+.ruff_cache
+.cursor
+.env
+jobs.json
+tests
+*.md
+!README.md
+deploy

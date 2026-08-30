@@ -1,0 +1,11 @@
+[Unit]
+Description=Run KOIS pipeline every 20 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=20min
+Persistent=true
+Unit=kois-pipeline.service
+
+[Install]
+WantedBy=timers.target
