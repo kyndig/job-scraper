@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from job_scraper.kois.config import ImapAccount, KOISSettings
 from job_scraper.kois.ingestion.imap_adapter import (
     ImapIngestError,
+    _uids_at_or_after,
     fetch_account_items,
     fetch_imap_items,
 )
@@ -18,6 +19,7 @@ class FakeImapConnection:
         self.logged_in = False
         self.selected = None
         self.searches: list[tuple] = []
+        self.fetches: list[tuple] = []
         self._message = message or (
             b"From: sender@example.com\r\n"
             b"To: oppdrag@kynd.no\r\n"
@@ -43,6 +45,7 @@ class FakeImapConnection:
             self.searches.append(_args)
             return "OK", [self._uids]
         if command == "FETCH":
+            self.fetches.append(_args)
             return "OK", [(b"1 (RFC822 {200}", self._message)]
         return "NO", []
 
@@ -59,6 +62,18 @@ def _session() -> Session:
     engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
     Base.metadata.create_all(engine)
     return Session(bind=engine, future=True)
+
+
+def _seed_email_cursor(session: Session, last_uid: int = 6) -> None:
+    session.add(
+        IngestCursor(
+            source_type="email",
+            source_name="oppdrag@kynd.no",
+            mailbox="INBOX",
+            last_uid=last_uid,
+        )
+    )
+    session.flush()
 
 
 def test_fetch_imap_items_maps_email_to_raw_item(monkeypatch):
@@ -179,6 +194,60 @@ def test_uid_cursor_advances_after_successful_fetch(monkeypatch):
     )
     fetch_imap_items(settings, session)
     assert second.searches[0][-1] == "UID 7:*"
+    assert session.execute(select(IngestCursor)).scalar_one().last_uid == 7
+
+
+def test_uids_at_or_after_drops_star_range_high_watermark():
+    # RFC 3501: UID 7:* still matches UID 6 when 6 is the mailbox maximum.
+    assert _uids_at_or_after([b"6"], since_uid=7) == []
+    assert _uids_at_or_after([b"6 7 8"], since_uid=7) == [b"7", b"8"]
+    assert _uids_at_or_after([None], since_uid=1) == []
+
+
+def test_uid_cursor_does_not_refetch_last_message_when_mailbox_is_unchanged(
+    monkeypatch,
+):
+    session = _session()
+    _seed_email_cursor(session, last_uid=6)
+
+    connection = FakeImapConnection(uids=b"6")
+    monkeypatch.setattr(
+        "job_scraper.kois.ingestion.imap_adapter.imaplib.IMAP4_SSL",
+        lambda _host, _port: connection,
+    )
+    settings = KOISSettings(
+        imap_host="imap.example.com",
+        imap_username="user",
+        imap_password="pass",
+        imap_source_name="oppdrag@kynd.no",
+    )
+    items = fetch_imap_items(settings, session)
+    assert items == []
+    assert connection.searches[0][-1] == "UID 7:*"
+    assert connection.fetches == []
+    assert session.execute(select(IngestCursor)).scalar_one().last_uid == 6
+
+
+def test_uid_cursor_ingests_only_new_uids_when_star_range_includes_watermark(
+    monkeypatch,
+):
+    session = _session()
+    _seed_email_cursor(session, last_uid=6)
+
+    connection = FakeImapConnection(uids=b"6 7")
+    monkeypatch.setattr(
+        "job_scraper.kois.ingestion.imap_adapter.imaplib.IMAP4_SSL",
+        lambda _host, _port: connection,
+    )
+    settings = KOISSettings(
+        imap_host="imap.example.com",
+        imap_username="user",
+        imap_password="pass",
+        imap_source_name="oppdrag@kynd.no",
+    )
+    items = fetch_imap_items(settings, session)
+    assert len(items) == 1
+    assert [args[0] for args in connection.fetches] == [b"7"]
     assert session.execute(select(IngestCursor)).scalar_one().last_uid == 7
 
 
