@@ -24,17 +24,22 @@ class JobScraper(ABC):
 
         self.logging = logging
 
-    def _load_credentials(self) -> tuple[str, str]:
+    def _load_credentials(self) -> tuple[str | None, str | None]:
         prefix = self.job_platform.upper()
         username = os.getenv(f"{prefix}_USERNAME")
         password = os.getenv(f"{prefix}_PASSWORD")
-        if not username or not password:
-            raise ValueError(
-                f"Missing {prefix}_USERNAME or {prefix}_PASSWORD in environment"
-            )
         return username, password
 
     async def scrape_jobs(self) -> List[Job]:
+        if not self.username or not self.password:
+            logging.warning(
+                "Skipping %s: missing %s_USERNAME or %s_PASSWORD",
+                self.job_platform,
+                self.job_platform.upper(),
+                self.job_platform.upper(),
+            )
+            return []
+
         logging.info(f"Starting {self.job_platform}")
 
         context: BrowserContext = await self.browser.new_context()
