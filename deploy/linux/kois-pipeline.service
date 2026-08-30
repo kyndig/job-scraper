@@ -1,0 +1,9 @@
+[Unit]
+Description=KOIS pipeline run
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/kois
+ExecStart=/opt/kois/scripts/run-pipeline

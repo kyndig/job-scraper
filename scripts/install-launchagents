@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LAUNCH_DIR="$HOME/Library/LaunchAgents"
+mkdir -p "$LAUNCH_DIR" "$ROOT/backups"
+
+install_plist() {
+  local src="$1"
+  local label="$2"
+  local dest="$LAUNCH_DIR/${label}.plist"
+  sed "s|KOIS_ROOT|$ROOT|g; s|KOIS_HOME|$HOME|g" "$src" >"$dest"
+  launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
+  launchctl bootstrap "gui/$(id -u)" "$dest"
+  echo "Installed $dest"
+}
+
+install_plist "$ROOT/deploy/macos/no.kynd.kois-pipeline.plist" "no.kynd.kois-pipeline"
+install_plist "$ROOT/deploy/macos/no.kynd.kois-backup.plist" "no.kynd.kois-backup"
+echo "Pipeline every 20 minutes; DB dump daily at 03:15."
+echo "Kick a pipeline now: ./scripts/run-pipeline python -m job_scraper.main --email-only"

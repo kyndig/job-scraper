@@ -39,7 +39,9 @@ Core:
 
 Integrations:
 
-- `GEMINI_API_KEY` (optional; summarization/extraction enhancement)
+- `KOIS_LLM_PROVIDER` (`anthropic` or `kimi`; optional — auto-selected if only one API key is set)
+- `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` (default `claude-sonnet-4-5`)
+- `KIMI_API_KEY` or `MOONSHOT_API_KEY` / `KIMI_BASE_URL` (default `https://api.moonshot.ai/v1`) / `KIMI_MODEL` (default `kimi-k2-turbo-preview`)
 - `SLACK_TOKEN` (required only when `RUN_LIVE_SLACK=true`)
 - `{PLATFORM}_USERNAME` / `{PLATFORM}_PASSWORD` for each scraper (missing creds skip that scraper)
 
@@ -57,7 +59,7 @@ IMAP (multiple mailboxes):
 
 - `IMAP_ACCOUNTS_JSON` — JSON array of `{host, username, password, mailbox?, source_name?, port?, since_uid?}`. When set, it replaces the scalar `IMAP_*` fallback.
 
-See `.env.example` for a host-ready template.
+See `.env.example` for the plaintext schema. Runtime `.env` is decrypted with `./scripts/secrets-decrypt` and is gitignored.
 
 ### Setup
 
@@ -110,41 +112,43 @@ Useful API endpoints:
 
 Send `Authorization: Bearer $KOIS_REVIEW_TOKEN` when a token is configured.
 
-### Deploy next to Forgejo
+### Deploy (macOS: M1 now, Mac Mini later)
 
-Run KOIS as a **separate Docker Compose project** on the same machine as Forgejo. Do not share Forgejo's Postgres or compose file.
+Same Compose stack on Apple Silicon. Do not share Forgejo's Postgres. Do not put API keys in the Forgejo repo as plaintext.
+
+Prereqs: Docker Desktop, OrbStack, or Colima; `brew install age sops`.
+
+**Secrets (SOPS + age)**
+
+1. Each operator: `./scripts/secrets-keygen` and commit their `age1...` public key in `deploy/age-recipients.txt`.
+2. First operator: `cp .env.example .env`, set `POSTGRES_SUPERUSER_PASSWORD` and `KOIS_DB_PASSWORD` with `openssl rand -hex 32`, fill IMAP/LLM/Slack as needed, then `./scripts/secrets-encrypt`.
+3. Commit `deploy/secrets.enc.env`. Never commit `.env`.
+4. After a new public key is added, an existing operator re-runs `./scripts/secrets-encrypt`.
+5. On the host: `./scripts/secrets-decrypt` (writes `.env` mode 600).
+
+**Start**
 
 ```bash
-cp .env.example .env
-# fill IMAP accounts, KOIS_REVIEW_TOKEN, and DATABASE_URL (host `db`)
+./scripts/secrets-decrypt
 docker compose up -d db api
-docker compose --profile batch run --rm pipeline python -m job_scraper.main --email-only
+./scripts/run-pipeline python -m job_scraper.main --email-only
 ```
 
-Confirm ingest in the UI via SSH tunnel:
+UI is on `http://127.0.0.1:8080/ui`. Keep `KOIS_SKIP_SCRAPERS=true` and `RUN_LIVE_SLACK=false` until `/ui/sources` shows email.
+
+**Schedule (launchd)**
 
 ```bash
-ssh -L 8080:127.0.0.1:8080 user@host
-# open http://127.0.0.1:8080/ui and /ui/sources
+./scripts/install-launchagents
 ```
 
-Then install the timer (adjust `WorkingDirectory` in `deploy/kois-pipeline.service` to the clone path):
+Pipeline every 20 minutes; `pg_dump -Fc` daily at 03:15 into `backups/` (gitignored, 30-day retention). Manual backup: `./scripts/backup-db`. Restore (destructive): `./scripts/restore-db backups/kois-....dump`.
 
-```bash
-sudo cp deploy/kois-pipeline.service deploy/kois-pipeline.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now kois-pipeline.timer
-```
+Moving M1 → Mini: copy the git repo, `./scripts/secrets-decrypt`, `docker compose up -d db api`, restore the latest dump, install launch agents. Do not copy Docker volumes between machines.
 
-Keep `RUN_LIVE_SLACK=false` until email rows appear in `/ui/sources`. Enable scrapers by unsetting `KOIS_SKIP_SCRAPERS` after IMAP is confirmed.
+Linux systemd units remain in `deploy/linux/` if a non-Mac host is used later.
 
-Nightly KOIS-only backup:
-
-```bash
-docker compose exec -T db pg_dump -U kois kois > kois-$(date +%F).sql
-```
-
-Git: pull from the Forgejo remote on the host (`git pull && docker compose build && docker compose up -d`). Do not use Forgejo Actions to schedule scrapes on this box.
+Git: Forgejo (or GitHub) holds code and ciphertext. Pull on the host, then `docker compose build && docker compose up -d`. Do not use Forgejo Actions as the production scheduler.
 
 ### Live IMAP verification
 
