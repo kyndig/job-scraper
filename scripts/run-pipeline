@@ -1,50 +1,42 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LOCK_DIR="${KOIS_PIPELINE_LOCK:-/tmp/kois-pipeline.lock}"
-PID_FILE="$LOCK_DIR/pid"
-LOCK_HELD=0
-
-stale_lock() {
-  local old_pid
-  old_pid="$(cat "$PID_FILE" 2>/dev/null || true)"
-  [[ -n "$old_pid" ]] || return 0
-  ! kill -0 "$old_pid" 2>/dev/null
-}
-
-acquire_lock() {
-  if mkdir "$LOCK_DIR" 2>/dev/null; then
-    echo $$ >"$PID_FILE"
-    LOCK_HELD=1
-    return 0
-  fi
-  if stale_lock; then
-    rm -rf "$LOCK_DIR"
-    if mkdir "$LOCK_DIR" 2>/dev/null; then
-      echo $$ >"$PID_FILE"
-      LOCK_HELD=1
-      return 0
-    fi
-  fi
-  return 1
-}
-
-cleanup() {
-  if [[ "$LOCK_HELD" -eq 1 ]]; then
-    rm -rf "$LOCK_DIR"
-  fi
-}
-trap cleanup EXIT INT TERM
+LOCK_FILE="${KOIS_PIPELINE_LOCK:-/tmp/kois-pipeline.lock}"
 
 cd "$ROOT"
-if ! acquire_lock; then
-  echo "KOIS pipeline already running; skipping."
-  exit 0
-fi
-
 if [[ ! -f "$ROOT/.env" ]]; then
   echo "Missing .env. Run ./scripts/secrets-decrypt first." >&2
   exit 1
 fi
 
-docker compose --profile batch run --rm pipeline "$@"
+# Kernel-held advisory lock: released on process exit, including SIGKILL.
+export KOIS_PIPELINE_LOCK_FILE="$LOCK_FILE"
+export KOIS_PIPELINE_ROOT="$ROOT"
+exec python3 - "$@" <<'PY'
+import fcntl
+import os
+import subprocess
+import sys
+
+lock_path = os.environ["KOIS_PIPELINE_LOCK_FILE"]
+os.chdir(os.environ["KOIS_PIPELINE_ROOT"])
+fh = open(lock_path, "w")
+try:
+    fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+except BlockingIOError:
+    print("KOIS pipeline already running; skipping.")
+    sys.exit(0)
+fh.write(str(os.getpid()))
+fh.flush()
+cmd = [
+    "docker",
+    "compose",
+    "--profile",
+    "batch",
+    "run",
+    "--rm",
+    "pipeline",
+    *sys.argv[1:],
+]
+raise SystemExit(subprocess.call(cmd))
+PY
