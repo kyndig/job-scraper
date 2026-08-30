@@ -1,0 +1,44 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kois}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kois}
+      POSTGRES_DB: ${POSTGRES_DB:-kois}
+    volumes:
+      - kois_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kois} -d ${POSTGRES_DB:-kois}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://kois:kois@db:5432/kois}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8000"
+    command: ["uvicorn", "job_scraper.kois.review_api:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  pipeline:
+    build: .
+    profiles: ["batch"]
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://kois:kois@db:5432/kois}
+    depends_on:
+      db:
+        condition: service_healthy
+    shm_size: "1gb"
+    init: true
+    command: ["python", "-m", "job_scraper.main"]
+
+volumes:
+  kois_pg_data:
