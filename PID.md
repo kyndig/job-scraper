@@ -74,11 +74,11 @@ This is a default policy, not a reason to discard broker details. Broker descrip
 
 ### Phase 1: Foundation And Inbox
 
-Ingest `oppdrag@kynd.no` emails and current scraper outputs, preserve raw evidence, extract structured records, cluster likely duplicates, expose a basic review queue, and produce a conservative digest.
+Ingest assignment emails (including `oppdrag@kynd.no` and additional configured mailboxes) and current scraper outputs, preserve raw evidence, extract structured records, cluster likely duplicates, expose a basic review queue and operator inbox UI, and produce a conservative digest.
 
 Success metric: KOIS becomes a searchable assignment archive with fewer duplicate distractions than email.
 
-Implementation status: in progress. Current implementation uses Postgres-backed persistence, scraper + IMAP ingestion adapters, cluster/source comparison records, a minimal review API surface, and digest-item persistence.
+Implementation status: completed for now. Current implementation uses Postgres-backed persistence, scraper + multi-mailbox IMAP ingestion with persisted UID cursors, cluster/source comparison records, a review API and `/ui` inbox, and digest-item persistence. Hosting is a separate Docker Compose stack intended to sit next to Forgejo; live Slack remains off until IMAP ingest is confirmed.
 
 ### Phase 2: Market And Agreement Intelligence
 
@@ -110,7 +110,7 @@ Success metric: recruitment and CV positioning decisions are informed by observe
 
 ## Delivery Surfaces
 
-- Basic UI for review, merge, split, ignore, and source comparison.
+- Basic UI for review, ignore, watch, and source comparison (`/ui`).
 - Slack channels for conservative digests, review prompts, and optionally DPS/agreement updates.
 - API view for relevance-filtered opportunities based on current Phase 3 policy.
 - Periodic market reports.
