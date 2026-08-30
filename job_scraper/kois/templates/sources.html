@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Recent sources{% endblock %}
+{% block content %}
+  <h1>Recent sources</h1>
+  <p class="muted">{{ summary.total }} stored source items. Last received {{ summary.latest_received_at or "—" }}.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>When</th>
+        <th>Type</th>
+        <th>Source</th>
+        <th>Subject / id</th>
+        <th>Snippet</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in sources %}
+      <tr>
+        <td>{{ item.received_at or "—" }}</td>
+        <td>{{ item.source_type }}</td>
+        <td>{{ item.source_name }}</td>
+        <td>{{ item.subject or item.external_id }}</td>
+        <td>{{ item.snippet }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

@@ -1,20 +1,56 @@
 from __future__ import annotations
 
-from fastapi import Depends, FastAPI, HTTPException
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import Depends, FastAPI, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, text
 from sqlalchemy.orm import Session
 
 from job_scraper.kois.analytics import phase2_summary
+from job_scraper.kois.auth import (
+    REVIEW_TOKEN_COOKIE,
+    extract_review_token,
+    review_access_decision,
+)
 from job_scraper.kois.config import get_settings
-from job_scraper.kois.db import get_db_session
+from job_scraper.kois.db import create_db_engine, get_db_session
 from job_scraper.kois.filtering import ClusterFilteringResult, OpportunityFilterPolicy
 from job_scraper.kois.gaps import discover_missing_agreement_gaps, set_gap_status
-from job_scraper.kois.repository import list_agreement_gaps, list_agreement_signals
-from job_scraper.kois.review import ReviewService
+from job_scraper.kois.migrations import run_migrations
+from job_scraper.kois.repository import (
+    ingest_summary,
+    list_agreement_gaps,
+    list_agreement_signals,
+    list_recent_raw_sources,
+)
+from job_scraper.kois.review import ReviewService, cluster_detail_payload
 from job_scraper.kois.schema import GapStatus, OpportunityCluster, ReviewStatus
 
-app = FastAPI(title="KOIS Review, Intelligence, And Filtering API")
+UI_STATUS_CHOICES = [
+    ReviewStatus.NEEDS_REVIEW,
+    ReviewStatus.AUTO_ACCEPTED,
+    ReviewStatus.WATCH_ONLY,
+    ReviewStatus.IGNORED,
+]
+
+TEMPLATE_DIR = Path(__file__).parent / "templates"
+templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    run_migrations(create_db_engine())
+    yield
+
+
+app = FastAPI(
+    title="KOIS Review, Intelligence, And Filtering API",
+    lifespan=lifespan,
+)
 
 
 class ReviewUpdate(BaseModel):
@@ -29,9 +65,33 @@ class GapStatusUpdate(BaseModel):
     note: str | None = None
 
 
+@app.middleware("http")
+async def review_token_middleware(request: Request, call_next):
+    settings = get_settings()
+    decision = review_access_decision(
+        path=request.url.path,
+        provided=extract_review_token(
+            request.headers.get("Authorization"),
+            request.cookies.get(REVIEW_TOKEN_COOKIE),
+        ),
+        expected=settings.review_token,
+    )
+    if decision == "allow":
+        return await call_next(request)
+    if decision == "login":
+        return RedirectResponse(url="/ui/login", status_code=303)
+    return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+
+
 @app.get("/health")
-def healthcheck():
-    return {"ok": True}
+def healthcheck(session: Session = Depends(get_db_session)):
+    try:
+        session.execute(text("SELECT 1"))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=503, detail=f"database unavailable: {exc}"
+        ) from exc
+    return {"ok": True, "database": "ok"}
 
 
 @app.get("/clusters")
@@ -84,6 +144,18 @@ def list_clusters(
     return response
 
 
+@app.get("/clusters/{cluster_id}")
+def get_cluster_detail(
+    cluster_id: int, session: Session = Depends(get_db_session)
+):
+    review_service = ReviewService(session)
+    try:
+        cluster = review_service.get_cluster(cluster_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return cluster_detail_payload(cluster)
+
+
 @app.get("/review-queue")
 def review_queue(session: Session = Depends(get_db_session)):
     review_service = ReviewService(session)
@@ -100,6 +172,27 @@ def review_queue(session: Session = Depends(get_db_session)):
             ],
         }
         for cluster in clusters
+    ]
+
+
+@app.get("/ingest/summary")
+def ingest_summary_view(session: Session = Depends(get_db_session)):
+    return ingest_summary(session)
+
+
+@app.get("/ingest/sources")
+def ingest_sources(limit: int = 50, session: Session = Depends(get_db_session)):
+    return [
+        {
+            "id": item.id,
+            "source_type": item.source_type,
+            "source_name": item.source_name,
+            "external_id": item.external_id,
+            "received_at": item.received_at.isoformat() if item.received_at else None,
+            "subject": (item.metadata_json or {}).get("subject"),
+            "snippet": (item.raw_body or "")[:400],
+        }
+        for item in list_recent_raw_sources(session, limit=limit)
     ]
 
 
@@ -268,3 +361,129 @@ def update_agreement_gap_status(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     session.commit()
     return {"id": gap.id, "status": gap.status.value}
+
+
+def _ui_cluster_rows(
+    session: Session,
+    *,
+    status: ReviewStatus | None,
+    q: str | None,
+) -> list[dict]:
+    return list_clusters(status=status, q=q, session=session)
+
+
+@app.get("/ui/login", response_class=HTMLResponse)
+def ui_login(request: Request, error: str | None = None):
+    settings = get_settings()
+    if not settings.review_token:
+        return RedirectResponse(url="/ui", status_code=303)
+    return templates.TemplateResponse(
+        request,
+        "login.html",
+        {"error": error, "auth_enabled": False},
+    )
+
+
+@app.post("/ui/login")
+def ui_login_submit(token: str = Form(...)):
+    settings = get_settings()
+    if settings.review_token and token != settings.review_token:
+        return RedirectResponse(url="/ui/login?error=invalid", status_code=303)
+    response = RedirectResponse(url="/ui", status_code=303)
+    if settings.review_token:
+        response.set_cookie(
+            REVIEW_TOKEN_COOKIE,
+            settings.review_token,
+            httponly=True,
+            samesite="lax",
+        )
+    return response
+
+
+@app.post("/ui/logout")
+def ui_logout():
+    response = RedirectResponse(url="/ui/login", status_code=303)
+    response.delete_cookie(REVIEW_TOKEN_COOKIE)
+    return response
+
+
+@app.get("/ui", response_class=HTMLResponse)
+def ui_inbox(
+    request: Request,
+    q: str | None = None,
+    status: str | None = "needs_review",
+    session: Session = Depends(get_db_session),
+):
+    review_status = ReviewStatus(status) if status else None
+    clusters = _ui_cluster_rows(session, status=review_status, q=q)
+    return templates.TemplateResponse(
+        request,
+        "inbox.html",
+        {
+            "clusters": clusters,
+            "summary": ingest_summary(session),
+            "q": q or "",
+            "status": status or "",
+            "status_choices": [item.value for item in ReviewStatus],
+            "auth_enabled": bool(get_settings().review_token),
+        },
+    )
+
+
+@app.get("/ui/clusters/{cluster_id}", response_class=HTMLResponse)
+def ui_cluster_detail(
+    request: Request,
+    cluster_id: int,
+    session: Session = Depends(get_db_session),
+):
+    review_service = ReviewService(session)
+    try:
+        cluster = review_service.get_cluster(cluster_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return templates.TemplateResponse(
+        request,
+        "cluster_detail.html",
+        {
+            "cluster": cluster_detail_payload(cluster),
+            "status_choices": [item.value for item in UI_STATUS_CHOICES],
+            "auth_enabled": bool(get_settings().review_token),
+        },
+    )
+
+
+@app.post("/ui/clusters/{cluster_id}/status")
+def ui_update_cluster_status(
+    cluster_id: int,
+    status: ReviewStatus = Form(...),
+    note: str | None = Form(default=None),
+    session: Session = Depends(get_db_session),
+):
+    review_service = ReviewService(session)
+    try:
+        review_service.set_status(
+            cluster_id=cluster_id,
+            status=status,
+            actor="operator",
+            note=note or None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return RedirectResponse(url=f"/ui/clusters/{cluster_id}", status_code=303)
+
+
+@app.get("/ui/sources", response_class=HTMLResponse)
+def ui_sources(
+    request: Request,
+    session: Session = Depends(get_db_session),
+):
+    sources = ingest_sources(limit=50, session=session)
+    return templates.TemplateResponse(
+        request,
+        "sources.html",
+        {
+            "sources": sources,
+            "summary": ingest_summary(session),
+            "auth_enabled": bool(get_settings().review_token),
+        },
+    )

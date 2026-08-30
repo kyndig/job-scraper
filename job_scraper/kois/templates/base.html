@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}KOIS{% endblock %}</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f5f1;
+      --fg: #1c1b19;
+      --muted: #5c5a55;
+      --line: #d8d4cc;
+      --card: #fff;
+      --accent: #1f4f4a;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #161614;
+        --fg: #eceae4;
+        --muted: #b3afa6;
+        --line: #3a3934;
+        --card: #1f1e1b;
+        --accent: #8fbfb8;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.45;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    header, main { max-width: 1100px; margin: 0 auto; padding: 16px 20px; }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--line);
+    }
+    nav { display: flex; gap: 16px; align-items: center; }
+    .muted { color: var(--muted); }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+      margin: 12px 0;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; font-size: 0.85rem; }
+    form.inline { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
+    input, select, textarea, button {
+      font: inherit;
+      padding: 6px 8px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--card);
+      color: var(--fg);
+    }
+    button {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      cursor: pointer;
+    }
+    .stats { display: flex; gap: 16px; flex-wrap: wrap; }
+    .stat { min-width: 140px; }
+    .stat strong { display: block; font-size: 1.2rem; }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.9rem;
+      background: var(--bg);
+      padding: 12px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>KOIS</strong>
+    <nav>
+      <a href="/ui">Inbox</a>
+      <a href="/ui/sources">Recent sources</a>
+      {% if auth_enabled %}
+      <form method="post" action="/ui/logout">
+        <button type="submit">Log out</button>
+      </form>
+      {% endif %}
+    </nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

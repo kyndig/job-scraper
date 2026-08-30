@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}KOIS inbox{% endblock %}
+{% block content %}
+  <h1>Assignment inbox</h1>
+  <div class="card stats">
+    <div class="stat">
+      <span class="muted">Raw sources</span>
+      <strong>{{ summary.total }}</strong>
+    </div>
+    <div class="stat">
+      <span class="muted">Last received</span>
+      <strong>{{ summary.latest_received_at or "—" }}</strong>
+    </div>
+    {% for item in summary.by_source %}
+    <div class="stat">
+      <span class="muted">{{ item.source_type }} / {{ item.source_name }}</span>
+      <strong>{{ item.count }}</strong>
+    </div>
+    {% endfor %}
+  </div>
+
+  <form method="get" action="/ui" class="inline card">
+    <label>Search
+      <input type="search" name="q" value="{{ q }}">
+    </label>
+    <label>Status
+      <select name="status">
+        <option value="" {% if not status %}selected{% endif %}>all</option>
+        {% for choice in status_choices %}
+        <option value="{{ choice }}" {% if status == choice %}selected{% endif %}>{{ choice }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">Filter</button>
+  </form>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Customer</th>
+        <th>Status</th>
+        <th>Sources</th>
+        <th>Relevance</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for cluster in clusters %}
+      <tr>
+        <td><a href="/ui/clusters/{{ cluster.id }}">{{ cluster.title or cluster.cluster_key }}</a></td>
+        <td>{{ cluster.customer or "—" }}</td>
+        <td>{{ cluster.review_status }}</td>
+        <td>{{ cluster.source_count }}</td>
+        <td>{{ "%.2f"|format(cluster.relevance_score) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

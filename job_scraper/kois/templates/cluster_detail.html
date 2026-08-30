@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ cluster.title or cluster.cluster_key }}{% endblock %}
+{% block content %}
+  <p><a href="/ui">Back to inbox</a></p>
+  <h1>{{ cluster.title or cluster.cluster_key }}</h1>
+  <p class="muted">{{ cluster.customer or "Unknown customer" }} · {{ cluster.review_status }} · confidence {{ "%.2f"|format(cluster.confidence) }}</p>
+
+  <form method="post" action="/ui/clusters/{{ cluster.id }}/status" class="card inline">
+    <label>Status
+      <select name="status">
+        {% for choice in status_choices %}
+        <option value="{{ choice }}" {% if cluster.review_status == choice %}selected{% endif %}>{{ choice }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Note
+      <input type="text" name="note">
+    </label>
+    <button type="submit">Update</button>
+  </form>
+
+  {% if cluster.comparisons %}
+  <section class="card">
+    <h2>Source comparison</h2>
+    <table>
+      <thead><tr><th>Field</th><th>Values</th></tr></thead>
+      <tbody>
+        {% for comparison in cluster.comparisons %}
+        <tr>
+          <td>{{ comparison.field }}</td>
+          <td><pre>{{ comparison.values }}</pre></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+
+  <section class="card">
+    <h2>Sources</h2>
+    {% for source in cluster.sources %}
+      <article>
+        <h3>{{ source.source_name or source.source_type or "source" }}</h3>
+        <p class="muted">{{ source.title or "—" }} · {{ source.customer or "—" }}</p>
+        {% if source.source_url %}<p><a href="{{ source.source_url }}">{{ source.source_url }}</a></p>{% endif %}
+        {% if source.raw_snippet %}<pre>{{ source.raw_snippet }}</pre>{% endif %}
+      </article>
+    {% endfor %}
+  </section>
+{% endblock %}
