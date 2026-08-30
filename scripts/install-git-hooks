@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+HOOK_DIR="$ROOT/.git/hooks"
+HOOK="$HOOK_DIR/pre-commit"
+
+if [[ ! -d "$HOOK_DIR" ]]; then
+  echo "No .git/hooks directory found; run this from a git clone." >&2
+  exit 1
+fi
+
+if [[ -f "$HOOK" ]] && ! grep -q 'scripts/lint' "$HOOK"; then
+  echo "Existing pre-commit hook is not the KOIS lint hook; not overwriting $HOOK" >&2
+  exit 1
+fi
+
+cat > "$HOOK" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+exec "$ROOT/scripts/lint"
+EOF
+chmod +x "$HOOK"
+echo "Installed pre-commit hook at $HOOK (runs ./scripts/lint)."
+echo "Run ./scripts/check before push to match CI (lint + tests)."

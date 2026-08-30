@@ -64,8 +64,7 @@ See `.env.example` for a host-ready template.
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
-pip install .
-pip install pytest pytest-asyncio ruff httpx
+pip install ".[dev]"
 python -m playwright install chromium
 ```
 
@@ -157,9 +156,16 @@ Git: pull from the Forgejo remote on the host (`git pull && docker compose build
 
 ### Checks
 
+These are the same commands CI runs. Use them before committing:
+
 ```bash
-ruff check .
-python -m pytest
+./scripts/check
+```
+
+`./scripts/lint` is Ruff only; `./scripts/test` is pytest only. To run lint automatically on every commit:
+
+```bash
+./scripts/install-git-hooks
 ```
 
 ### Notes
