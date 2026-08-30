@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/_python.sh
+source "$ROOT/scripts/_python.sh"
+cd "$ROOT"
+exec "$PYTHON" -m ruff check .
