@@ -1,25 +1,33 @@
+name: kois
+
 services:
   db:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-kois}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kois}
-      POSTGRES_DB: ${POSTGRES_DB:-kois}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?missing_POSTGRES_SUPERUSER_PASSWORD}
+      POSTGRES_DB: postgres
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+      KOIS_DB_USER: ${KOIS_DB_USER:-kois}
+      KOIS_DB_PASSWORD: ${KOIS_DB_PASSWORD:?missing_KOIS_DB_PASSWORD}
+      KOIS_DB_NAME: ${KOIS_DB_NAME:-kois}
     volumes:
       - kois_pg_data:/var/lib/postgresql/data
+      - ./deploy/postgres/init-kois.sh:/docker-entrypoint-initdb.d/01-kois.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kois} -d ${POSTGRES_DB:-kois}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
       interval: 5s
       timeout: 5s
       retries: 10
+    # No host ports: app containers reach db on the compose network only.
 
   api:
     build: .
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://kois:kois@db:5432/kois}
+      DATABASE_URL: ${DATABASE_URL:?missing_DATABASE_URL}
     depends_on:
       db:
         condition: service_healthy
@@ -32,7 +40,7 @@ services:
     profiles: ["batch"]
     env_file: .env
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://kois:kois@db:5432/kois}
+      DATABASE_URL: ${DATABASE_URL:?missing_DATABASE_URL}
     depends_on:
       db:
         condition: service_healthy
