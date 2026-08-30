@@ -2,14 +2,45 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOCK_DIR="${KOIS_PIPELINE_LOCK:-/tmp/kois-pipeline.lock}"
+PID_FILE="$LOCK_DIR/pid"
+LOCK_HELD=0
+
+stale_lock() {
+  local old_pid
+  old_pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+  [[ -n "$old_pid" ]] || return 0
+  ! kill -0 "$old_pid" 2>/dev/null
+}
+
+acquire_lock() {
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    echo $$ >"$PID_FILE"
+    LOCK_HELD=1
+    return 0
+  fi
+  if stale_lock; then
+    rm -rf "$LOCK_DIR"
+    if mkdir "$LOCK_DIR" 2>/dev/null; then
+      echo $$ >"$PID_FILE"
+      LOCK_HELD=1
+      return 0
+    fi
+  fi
+  return 1
+}
+
+cleanup() {
+  if [[ "$LOCK_HELD" -eq 1 ]]; then
+    rm -rf "$LOCK_DIR"
+  fi
+}
+trap cleanup EXIT INT TERM
 
 cd "$ROOT"
-if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+if ! acquire_lock; then
   echo "KOIS pipeline already running; skipping."
   exit 0
 fi
-cleanup() { rmdir "$LOCK_DIR" 2>/dev/null || true; }
-trap cleanup EXIT
 
 if [[ ! -f "$ROOT/.env" ]]; then
   echo "Missing .env. Run ./scripts/secrets-decrypt first." >&2
