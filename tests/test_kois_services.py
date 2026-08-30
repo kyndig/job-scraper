@@ -380,7 +380,7 @@ def test_orchestrator_reextracts_when_raw_body_changes(monkeypatch):
     session = _session()
     monkeypatch.setattr(
         "job_scraper.kois.orchestrator.fetch_imap_items",
-        lambda settings: [],
+        lambda *args, **kwargs: [],
     )
     monkeypatch.setattr(
         "job_scraper.kois.orchestrator.get_settings",
@@ -507,7 +507,7 @@ def test_orchestrator_retries_pending_digests_not_touched_this_run(monkeypatch):
 
     monkeypatch.setattr(
         "job_scraper.kois.orchestrator.fetch_imap_items",
-        lambda settings: [],
+        lambda *args, **kwargs: [],
     )
     monkeypatch.setattr(
         "job_scraper.kois.orchestrator.get_settings",
@@ -612,7 +612,7 @@ def test_orchestrator_detaches_stale_cluster_source_when_reextraction_fails(monk
     )
     monkeypatch.setattr(
         "job_scraper.kois.orchestrator.fetch_imap_items",
-        lambda settings: [],
+        lambda *args, **kwargs: [],
     )
     monkeypatch.setattr(
         "job_scraper.kois.orchestrator.get_settings",

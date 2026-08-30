@@ -11,6 +11,7 @@ INIT_MIGRATION_ID = "20260605_kois_phase1_init"
 DROP_CONTENT_HASH_UNIQUE_MIGRATION_ID = "20260606_drop_raw_source_content_hash_unique"
 PHASE2_INTELLIGENCE_MIGRATION_ID = "20260606_phase2_agreements_and_gaps"
 PHASE3_SALES_FILTERING_MIGRATION_ID = "20260607_phase3_sales_filtering"
+INGEST_CURSORS_MIGRATION_ID = "20260830_ingest_cursors"
 
 
 def _ensure_migrations_table(connection) -> None:
@@ -109,11 +110,16 @@ def _add_phase3_cluster_filtering_fields(connection) -> None:
     )
 
 
+def _add_ingest_cursors(connection) -> None:
+    schema.IngestCursor.__table__.create(bind=connection, checkfirst=True)
+
+
 MIGRATIONS: list[tuple[str, Callable]] = [
     (INIT_MIGRATION_ID, _run_init),
     (DROP_CONTENT_HASH_UNIQUE_MIGRATION_ID, _drop_content_hash_unique),
     (PHASE2_INTELLIGENCE_MIGRATION_ID, _add_phase2_tables),
     (PHASE3_SALES_FILTERING_MIGRATION_ID, _add_phase3_cluster_filtering_fields),
+    (INGEST_CURSORS_MIGRATION_ID, _add_ingest_cursors),
 ]
 
 

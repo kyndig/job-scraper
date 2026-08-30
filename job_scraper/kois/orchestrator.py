@@ -42,8 +42,14 @@ def run_kois_pipeline(
     settings = get_settings()
     ingestion_items: list[RawIngestionItem] = []
     ingestion_items.extend(jobs_to_raw_items(scraped_jobs))
-    ingestion_items.extend(fetch_imap_items(settings))
-    ingestion_items.extend(fetch_procurement_items(settings))
+    try:
+        ingestion_items.extend(fetch_imap_items(settings, session))
+    except Exception:  # noqa: BLE001
+        logger.exception("IMAP ingest failed; continuing with other sources")
+    try:
+        ingestion_items.extend(fetch_procurement_items(settings))
+    except Exception:  # noqa: BLE001
+        logger.exception("Procurement ingest failed; continuing with other sources")
 
     raw_items = [upsert_raw_source_item(session, item) for item in ingestion_items]
 
