@@ -6,7 +6,8 @@ authors = [{ name = "Daniel Sørenes", email = "daniel@kynd.no" }]
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "google-genai>=1.10.0",
+    "anthropic",
+    "openai",
     "playwright>=1.51.0",
     "psycopg[binary]",
     "pydantic>=2.11.3",

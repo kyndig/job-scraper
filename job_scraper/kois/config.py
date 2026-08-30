@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from functools import cached_property, lru_cache
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,7 +33,17 @@ class KOISSettings(BaseSettings):
     slack_token: str | None = Field(default=None, alias="SLACK_TOKEN")
     slack_channel: str = "job-posting"
 
-    gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
+    llm_provider: str | None = Field(default=None, alias="KOIS_LLM_PROVIDER")
+    anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
+    anthropic_model: str = Field(default="claude-sonnet-4-5", alias="ANTHROPIC_MODEL")
+    kimi_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("KIMI_API_KEY", "MOONSHOT_API_KEY"),
+    )
+    kimi_base_url: str = Field(
+        default="https://api.moonshot.ai/v1", alias="KIMI_BASE_URL"
+    )
+    kimi_model: str = Field(default="kimi-k2-turbo-preview", alias="KIMI_MODEL")
 
     imap_host: str | None = None
     imap_port: int = 993
@@ -93,6 +103,37 @@ class KOISSettings(BaseSettings):
         if not self.role_taxonomy_json:
             return {}
         return _parse_role_taxonomy_json(self.role_taxonomy_json)
+
+    def resolved_llm_provider(self) -> str | None:
+        explicit = _normalize_provider(self.llm_provider)
+        has_anthropic = bool(self.anthropic_api_key)
+        has_kimi = bool(self.kimi_api_key)
+        if explicit:
+            if explicit not in {"anthropic", "kimi"}:
+                raise ValueError(
+                    "KOIS_LLM_PROVIDER must be 'anthropic' or 'kimi'."
+                )
+            if explicit == "anthropic" and not has_anthropic:
+                raise ValueError(
+                    "ANTHROPIC_API_KEY is required when KOIS_LLM_PROVIDER=anthropic."
+                )
+            if explicit == "kimi" and not has_kimi:
+                raise ValueError(
+                    "KIMI_API_KEY (or MOONSHOT_API_KEY) is required when "
+                    "KOIS_LLM_PROVIDER=kimi."
+                )
+            return explicit
+        if has_anthropic and has_kimi:
+            raise ValueError(
+                "Both Anthropic and Kimi API keys are set. Set KOIS_LLM_PROVIDER "
+                "to 'anthropic' or 'kimi'."
+            )
+        if has_anthropic:
+            return "anthropic"
+        if has_kimi:
+            return "kimi"
+        return None
+
 
 
 @lru_cache(maxsize=1)
@@ -186,3 +227,10 @@ def _parse_role_taxonomy_json(raw_value: str) -> dict[str, list[str]]:
             )
         parsed[key.strip().lower()] = [item.strip().lower() for item in value if item.strip()]
     return parsed
+
+
+def _normalize_provider(value: str | None) -> str | None:
+    if not value:
+        return None
+    return value.strip().lower() or None
+
