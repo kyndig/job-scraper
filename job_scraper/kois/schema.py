@@ -239,6 +239,27 @@ class AgreementSignal(Base):
     raw_source: Mapped[RawSourceItem] = relationship()
 
 
+class IngestCursor(Base):
+    __tablename__ = "ingest_cursors"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_type",
+            "source_name",
+            "mailbox",
+            name="uq_ingest_cursor_source_mailbox",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_type: Mapped[str] = mapped_column(String(32), index=True)
+    source_name: Mapped[str] = mapped_column(String(128), index=True)
+    mailbox: Mapped[str] = mapped_column(String(128), index=True)
+    last_uid: Mapped[int] = mapped_column()
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+
 class AgreementGap(Base):
     __tablename__ = "agreement_gaps"
     __table_args__ = (

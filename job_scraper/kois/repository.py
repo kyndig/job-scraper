@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from job_scraper.kois.domain import RawIngestionItem
@@ -13,6 +13,7 @@ from job_scraper.kois.schema import (
     DigestItem,
     ExtractedRecord,
     GapStatus,
+    IngestCursor,
     OpportunityCluster,
     RawSourceItem,
     ReviewState,
@@ -394,3 +395,102 @@ def list_agreement_gaps(
     if status:
         query = query.where(AgreementGap.status == status)
     return list(session.execute(query).scalars())
+
+
+def get_ingest_cursor_uid(
+    session: Session,
+    *,
+    source_type: str,
+    source_name: str,
+    mailbox: str,
+) -> int | None:
+    cursor = session.execute(
+        select(IngestCursor).where(
+            IngestCursor.source_type == source_type,
+            IngestCursor.source_name == source_name,
+            IngestCursor.mailbox == mailbox,
+        )
+    ).scalar_one_or_none()
+    if cursor is None:
+        return None
+    return cursor.last_uid
+
+
+def upsert_ingest_cursor(
+    session: Session,
+    *,
+    source_type: str,
+    source_name: str,
+    mailbox: str,
+    last_uid: int,
+) -> IngestCursor:
+    cursor = session.execute(
+        select(IngestCursor).where(
+            IngestCursor.source_type == source_type,
+            IngestCursor.source_name == source_name,
+            IngestCursor.mailbox == mailbox,
+        )
+    ).scalar_one_or_none()
+    if cursor:
+        cursor.last_uid = last_uid
+        cursor.updated_at = datetime.now(timezone.utc)
+        session.flush()
+        return cursor
+
+    created = IngestCursor(
+        source_type=source_type,
+        source_name=source_name,
+        mailbox=mailbox,
+        last_uid=last_uid,
+    )
+    session.add(created)
+    session.flush()
+    return created
+
+
+def ingest_summary(session: Session) -> dict:
+    rows = session.execute(
+        select(
+            RawSourceItem.source_type,
+            RawSourceItem.source_name,
+            func.count(RawSourceItem.id),
+            func.max(RawSourceItem.received_at),
+        ).group_by(RawSourceItem.source_type, RawSourceItem.source_name)
+    ).all()
+    by_source = [
+        {
+            "source_type": source_type,
+            "source_name": source_name,
+            "count": count,
+            "latest_received_at": latest_received_at.isoformat()
+            if latest_received_at is not None
+            else None,
+        }
+        for source_type, source_name, count, latest_received_at in rows
+    ]
+    by_source.sort(key=lambda item: (-item["count"], item["source_type"], item["source_name"]))
+    total = sum(item["count"] for item in by_source)
+    latest_values = [
+        item["latest_received_at"]
+        for item in by_source
+        if item["latest_received_at"] is not None
+    ]
+    return {
+        "total": total,
+        "latest_received_at": max(latest_values) if latest_values else None,
+        "by_source": by_source,
+    }
+
+
+def list_recent_raw_sources(session: Session, limit: int = 50) -> list[RawSourceItem]:
+    return list(
+        session.execute(
+            select(RawSourceItem)
+            .order_by(RawSourceItem.received_at.desc(), RawSourceItem.id.desc())
+            .limit(limit)
+        ).scalars()
+    )
+
+
+def get_cluster(session: Session, cluster_id: int) -> OpportunityCluster | None:
+    return session.get(OpportunityCluster, cluster_id)
